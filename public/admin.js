@@ -1,13 +1,58 @@
 /**
- * Admin Dashboard Controller (admin.js)
- * Mendukung:
- * 1. Multi-layered QR Generator (Anti-blank: QRServer API + QRCodeJS Canvas Fallback)
- * 2. Real-time Multi-Provider Cloud Sync (MQTT WSS over SSL: bisa beda provider / beda Wi-Fi / kuota 4G)
- * 3. LocalStorage Persistence + Node.js Server Mode
+ * Admin Dashboard & Gate Controller (admin.js)
+ * Fitur:
+ * 1. Gate Pop-up Awal (Pilihan Admin Login vs Isi Absensi)
+ * 2. Kunci Layar Admin (Username: Admin1118, Password: AFIFweb18)
+ * 3. In-Browser Camera Scanner untuk menu "Isi Absensi"
+ * 4. Kunci Tanggal Regional (Hanya bisa absen hari ini)
+ * 5. Single-Use Dynamic QR Rotation & Device-Lock (1x per device per day)
+ * 6. Real-time Multi-Provider Cloud Sync (MQTT WSS) & Google Calendar Integration
  */
 
 document.addEventListener('DOMContentLoaded', () => {
-  // Elements
+  // --- GATE & AUTH ELEMENTS ---
+  const gateModal = document.getElementById('gateModal');
+  const btnOpenAdminLogin = document.getElementById('btnOpenAdminLogin');
+  const btnOpenScan = document.getElementById('btnOpenScan');
+
+  const adminLoginModal = document.getElementById('adminLoginModal');
+  const formAdminLogin = document.getElementById('formAdminLogin');
+  const inputUsername = document.getElementById('inputUsername');
+  const inputPassword = document.getElementById('inputPassword');
+  const btnTogglePassword = document.getElementById('btnTogglePassword');
+  const eyeIcon = document.getElementById('eyeIcon');
+  const loginError = document.getElementById('loginError');
+  const loginErrorText = document.getElementById('loginErrorText');
+  const btnCancelLogin = document.getElementById('btnCancelLogin');
+
+  const adminDashboardWrapper = document.getElementById('adminDashboardWrapper');
+  const btnLogoutAdmin = document.getElementById('btnLogoutAdmin');
+
+  // --- SCANNER MODAL ELEMENTS ---
+  const cameraScanModal = document.getElementById('cameraScanModal');
+  const btnCloseCamera = document.getElementById('btnCloseCamera');
+
+  // --- INLINE ATTENDANCE FORM ELEMENTS ---
+  const attendInlineModal = document.getElementById('attendInlineModal');
+  const inlineTokenBadge = document.getElementById('inlineTokenBadge');
+  const inlineFormWrapper = document.getElementById('inlineFormWrapper');
+  const inlineSuccessWrapper = document.getElementById('inlineSuccessWrapper');
+  const inlineAttendForm = document.getElementById('inlineAttendForm');
+  const inlineInputName = document.getElementById('inlineInputName');
+  const inlineInputDate = document.getElementById('inlineInputDate');
+  const inlineInputDay = document.getElementById('inlineInputDay');
+  const inlineDeviceLabel = document.getElementById('inlineDeviceLabel');
+  const btnCancelInline = document.getElementById('btnCancelInline');
+  const btnSubmitInline = document.getElementById('btnSubmitInline');
+
+  const inlineSuccName = document.getElementById('inlineSuccName');
+  const inlineSuccDate = document.getElementById('inlineSuccDate');
+  const inlineSuccTime = document.getElementById('inlineSuccTime');
+  const inlineBtnGCal = document.getElementById('inlineBtnGCal');
+  const inlineBtnIcs = document.getElementById('inlineBtnIcs');
+  const btnFinishInline = document.getElementById('btnFinishInline');
+
+  // --- ADMIN DASHBOARD ELEMENTS ---
   const tabBtnProjector = document.getElementById('tabBtnProjector');
   const tabBtnAudit = document.getElementById('tabBtnAudit');
   const tabBtnAttendance = document.getElementById('tabBtnAttendance');
@@ -36,7 +81,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const toastText = document.getElementById('toastText');
   const toastDetail = document.getElementById('toastDetail');
 
-  // Audit Elements
   const auditMetricTotal = document.getElementById('auditMetricTotal');
   const auditMetricActive = document.getElementById('auditMetricActive');
   const auditMetricUsed = document.getElementById('auditMetricUsed');
@@ -44,7 +88,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const auditTableBody = document.getElementById('auditTableBody');
   const btnRefreshAudit = document.getElementById('btnRefreshAudit');
 
-  // Attendance Elements
   const metricToday = document.getElementById('metricToday');
   const metricTotalRecords = document.getElementById('metricTotalRecords');
   const metricUniqueDevices = document.getElementById('metricUniqueDevices');
@@ -59,8 +102,18 @@ document.addEventListener('DOMContentLoaded', () => {
   const STORAGE_QR_TOKENS = 'sqr_qr_tokens';
   const STORAGE_ATTENDANCES = 'sqr_attendances';
   const STORAGE_SESSION = 'sqr_admin_session_id';
+  const STORAGE_AUTH = 'sqr_admin_authenticated';
 
-  // Persistent Admin Session ID (so QR link stays valid)
+  let currentActiveToken = null;
+  let isServerMode = false;
+  let mqttClient = null;
+  let html5QrScanner = null;
+  let activeScannedToken = null;
+  let activeScannedSession = null;
+
+  const broadcast = ('BroadcastChannel' in window) ? new BroadcastChannel('smart_qr_channel') : null;
+
+  // Persistent Admin Session ID (for MQTT cross-device sync)
   let adminSessionId = localStorage.getItem(STORAGE_SESSION);
   if (!adminSessionId) {
     adminSessionId = 'ses_' + Math.random().toString(36).substring(2, 9) + Date.now().toString(36).substring(4);
@@ -91,99 +144,463 @@ document.addEventListener('DOMContentLoaded', () => {
     localStorage.setItem(STORAGE_ATTENDANCES, JSON.stringify(records));
   }
 
-  let currentActiveToken = null;
-  let isServerMode = false;
-  let mqttClient = null;
-  const broadcast = ('BroadcastChannel' in window) ? new BroadcastChannel('smart_qr_channel') : null;
+  function getLocalDateString(d = new Date()) {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
 
-  // --- 1. WEB AUDIO API CHIME ---
+  function getIndonesianDayName(dateObj = new Date()) {
+    const days = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+    return days[dateObj.getDay()];
+  }
+
+  // --- AUDIO CHIME ---
   function playSuccessChime() {
     try {
-      const AudioCtx = window.AudioContext || window.webkitAudioContext;
-      if (!AudioCtx) return;
-      const ctx = new AudioCtx();
-      const now = ctx.currentTime;
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContext) return;
+      const ctx = new AudioContext();
+      if (ctx.state === 'suspended') ctx.resume();
 
       const osc1 = ctx.createOscillator();
       const osc2 = ctx.createOscillator();
       const gain = ctx.createGain();
 
       osc1.type = 'sine';
-      osc1.frequency.setValueAtTime(587.33, now); // D5
-      osc1.frequency.exponentialRampToValueAtTime(880, now + 0.15); // A5
-
       osc2.type = 'triangle';
-      osc2.frequency.setValueAtTime(880, now + 0.15); // A5
-      osc2.frequency.exponentialRampToValueAtTime(1174.66, now + 0.35); // D6
 
-      gain.gain.setValueAtTime(0.18, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
+      osc1.frequency.setValueAtTime(523.25, ctx.currentTime);
+      osc1.frequency.exponentialRampToValueAtTime(783.99, ctx.currentTime + 0.15);
+      osc1.frequency.exponentialRampToValueAtTime(1046.50, ctx.currentTime + 0.35);
+
+      osc2.frequency.setValueAtTime(659.25, ctx.currentTime);
+      osc2.frequency.exponentialRampToValueAtTime(1046.50, ctx.currentTime + 0.25);
+
+      gain.gain.setValueAtTime(0.01, ctx.currentTime);
+      gain.gain.linearRampToValueAtTime(0.25, ctx.currentTime + 0.05);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.55);
 
       osc1.connect(gain);
       osc2.connect(gain);
       gain.connect(ctx.destination);
 
-      osc1.start(now);
-      osc2.start(now + 0.15);
-      osc1.stop(now + 0.45);
-      osc2.stop(now + 0.45);
-    } catch (e) {
-      console.warn('Audio chime warning:', e);
+      osc1.start(ctx.currentTime);
+      osc2.start(ctx.currentTime);
+      osc1.stop(ctx.currentTime + 0.6);
+      osc2.stop(ctx.currentTime + 0.6);
+    } catch (e) {}
+  }
+
+  // --- 1. GATE & AUTHENTICATION CONTROLLER ---
+  function checkAuthStatus() {
+    const isAuth = sessionStorage.getItem(STORAGE_AUTH) === 'true';
+    if (isAuth) {
+      gateModal.classList.add('hidden');
+      adminLoginModal.classList.add('hidden');
+      adminDashboardWrapper.classList.remove('hidden');
+      initAdminDashboard();
+    } else {
+      adminDashboardWrapper.classList.add('hidden');
+      gateModal.classList.remove('hidden');
+      adminLoginModal.classList.add('hidden');
     }
   }
 
-  // --- 2. DIGITAL CLOCK ---
-  function updateClock() {
-    const now = new Date();
-    liveClock.textContent = now.toLocaleTimeString('id-ID', { hour12: false });
-    liveDate.textContent = now.toLocaleDateString('id-ID', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
+  btnOpenAdminLogin.addEventListener('click', () => {
+    gateModal.classList.add('hidden');
+    adminLoginModal.classList.remove('hidden');
+    loginError.classList.add('hidden');
+    inputUsername.value = '';
+    inputPassword.value = '';
+    setTimeout(() => inputUsername.focus(), 150);
+  });
+
+  btnCancelLogin.addEventListener('click', () => {
+    adminLoginModal.classList.add('hidden');
+    gateModal.classList.remove('hidden');
+  });
+
+  btnTogglePassword.addEventListener('click', () => {
+    if (inputPassword.type === 'password') {
+      inputPassword.type = 'text';
+      eyeIcon.setAttribute('data-lucide', 'eye-off');
+    } else {
+      inputPassword.type = 'password';
+      eyeIcon.setAttribute('data-lucide', 'eye');
+    }
+    lucide.createIcons();
+  });
+
+  formAdminLogin.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const user = inputUsername.value.trim();
+    const pass = inputPassword.value;
+
+    // Kredensial Admin Sesuai Permintaan
+    if (user === 'Admin1118' && pass === 'AFIFweb18') {
+      sessionStorage.setItem(STORAGE_AUTH, 'true');
+      adminLoginModal.classList.add('hidden');
+      gateModal.classList.add('hidden');
+      adminDashboardWrapper.classList.remove('hidden');
+      initAdminDashboard();
+      showToast('Login Berhasil', 'Selamat datang di Layar Admin.');
+    } else {
+      loginError.classList.remove('hidden');
+      loginErrorText.textContent = 'Username atau password salah!';
+      inputPassword.value = '';
+      inputPassword.focus();
+    }
+  });
+
+  btnLogoutAdmin.addEventListener('click', () => {
+    if (confirm('Apakah Anda yakin ingin mengunci layar admin?')) {
+      sessionStorage.removeItem(STORAGE_AUTH);
+      adminDashboardWrapper.classList.add('hidden');
+      gateModal.classList.remove('hidden');
+    }
+  });
+
+  // --- 2. CAMERA SCANNER FOR "ISI ABSENSI" ---
+  btnOpenScan.addEventListener('click', () => {
+    gateModal.classList.add('hidden');
+    cameraScanModal.classList.remove('hidden');
+    startInAppCameraScanner();
+  });
+
+  btnCloseCamera.addEventListener('click', () => {
+    stopInAppCameraScanner();
+    cameraScanModal.classList.add('hidden');
+    gateModal.classList.remove('hidden');
+  });
+
+  function startInAppCameraScanner() {
+    if (typeof Html5Qrcode === 'undefined') {
+      alert('Library scanner kamera sedang dimuat, silakan coba lagi sesaat lagi.');
+      return;
+    }
+
+    if (!html5QrScanner) {
+      html5QrScanner = new Html5Qrcode("qrScannerView");
+    }
+
+    const config = {
+      fps: 15,
+      qrbox: { width: 250, height: 250 },
+      aspectRatio: 1.0
+    };
+
+    html5QrScanner.start(
+      { facingMode: "environment" },
+      config,
+      onQrCodeSuccess,
+      (errorMessage) => {
+        // scan loop failure (no QR in frame) - silent
+      }
+    ).catch(err => {
+      console.error('Camera error:', err);
+      alert('Gagal mengakses kamera!\n\nPastikan Anda mengizinkan izin kamera pada browser Anda.');
+      stopInAppCameraScanner();
+      cameraScanModal.classList.add('hidden');
+      gateModal.classList.remove('hidden');
     });
   }
-  setInterval(updateClock, 1000);
-  updateClock();
 
-  // --- 3. BULLETPROOF MULTI-LAYERED QR GENERATION (ANTI-BLANK) ---
-  function generateRandomToken() {
-    return 'QR-' + Date.now().toString(36).toUpperCase() + '-' + Math.random().toString(36).substring(2, 7).toUpperCase();
+  function stopInAppCameraScanner() {
+    if (html5QrScanner && html5QrScanner.isScanning) {
+      html5QrScanner.stop().catch(() => {});
+    }
   }
 
-  function getBaseAppUrl() {
-    let path = window.location.pathname;
-    if (path.endsWith('index.html')) {
-      path = path.substring(0, path.length - 'index.html'.length);
+  async function onQrCodeSuccess(decodedText) {
+    playSuccessChime();
+    stopInAppCameraScanner();
+    cameraScanModal.classList.add('hidden');
+
+    let token = decodedText;
+    let session = null;
+
+    try {
+      if (decodedText.startsWith('http://') || decodedText.startsWith('https://')) {
+        const parsedUrl = new URL(decodedText);
+        token = parsedUrl.searchParams.get('token') || decodedText;
+        session = parsedUrl.searchParams.get('session') || null;
+      }
+    } catch (e) {}
+
+    activeScannedToken = token;
+    activeScannedSession = session;
+
+    openInlineAttendanceModal(token);
+  }
+
+  function openInlineAttendanceModal(token) {
+    inlineTokenBadge.textContent = token;
+    inlineFormWrapper.classList.remove('hidden');
+    inlineSuccessWrapper.classList.add('hidden');
+    attendInlineModal.classList.remove('hidden');
+
+    const today = new Date();
+    const todayStr = getLocalDateString(today);
+    inlineInputDate.value = todayStr;
+    inlineInputDay.value = getIndonesianDayName(today);
+
+    // Get Device info
+    if (window.DeviceFingerprint) {
+      const dev = window.DeviceFingerprint.getDeviceInfo();
+      inlineDeviceLabel.textContent = dev.deviceInfo;
     }
-    if (!path.endsWith('/')) {
-      path += '/';
+
+    inlineInputName.value = '';
+    setTimeout(() => inlineInputName.focus(), 150);
+    lucide.createIcons();
+  }
+
+  btnCancelInline.addEventListener('click', () => {
+    attendInlineModal.classList.add('hidden');
+    gateModal.classList.remove('hidden');
+  });
+
+  btnFinishInline.addEventListener('click', () => {
+    attendInlineModal.classList.add('hidden');
+    gateModal.classList.remove('hidden');
+  });
+
+  // Handle Form Presensi Submit
+  inlineAttendForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    const name = inlineInputName.value.trim();
+    const todayStr = getLocalDateString(new Date());
+    const dayStr = getIndonesianDayName(new Date());
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString('id-ID', { hour12: false });
+
+    if (!name) {
+      alert('Mohon masukkan nama lengkap Anda.');
+      return;
     }
-    return window.location.origin + path;
+
+    let devId = 'unknown_device';
+    let devInfo = 'Web Client';
+    if (window.DeviceFingerprint) {
+      const dev = window.DeviceFingerprint.getDeviceInfo();
+      devId = dev.deviceId;
+      devInfo = dev.deviceInfo;
+    }
+
+    btnSubmitInline.disabled = true;
+    const origText = btnSubmitInline.innerHTML;
+    btnSubmitInline.innerHTML = `
+      <div class="inline-block animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full mr-2"></div>
+      <span>Memverifikasi...</span>
+    `;
+
+    const payload = {
+      token: activeScannedToken,
+      name,
+      date: todayStr,
+      day: dayStr,
+      time: timeStr,
+      deviceId: devId,
+      deviceInfo: devInfo
+    };
+
+    // 1. Jika mode server Node.js lokal
+    try {
+      const res = await fetch('/api/attendance/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (res.ok || res.status === 400 || res.status === 403 || res.status === 409) {
+        const data = await res.json();
+        btnSubmitInline.disabled = false;
+        btnSubmitInline.innerHTML = origText;
+        if (!data.success) {
+          alert('Presensi Ditolak:\n\n' + data.error);
+          return;
+        }
+        renderInlineSuccess(data.attendance);
+        return;
+      }
+    } catch (e) {}
+
+    // 2. Jika local engine / single browser
+    const result = processAttendanceSubmission(payload);
+    btnSubmitInline.disabled = false;
+    btnSubmitInline.innerHTML = origText;
+
+    if (!result.success) {
+      alert('Presensi Ditolak:\n\n' + result.error);
+      return;
+    }
+
+    renderInlineSuccess(result.attendance);
+  });
+
+  function renderInlineSuccess(record) {
+    inlineFormWrapper.classList.add('hidden');
+    inlineSuccessWrapper.classList.remove('hidden');
+
+    inlineSuccName.textContent = record.name;
+    inlineSuccDate.textContent = `${record.day}, ${record.date}`;
+    inlineSuccTime.textContent = `${record.time} WIB`;
+
+    setupInlineGoogleCalendar(record);
+    lucide.createIcons();
+  }
+
+  function setupInlineGoogleCalendar({ name, date, day, time, token }) {
+    const [year, month, dayNum] = date.split('-');
+    const [hour, minute, second] = (time || '08:00:00').split(':');
+
+    const startDate = new Date(year, month - 1, dayNum, parseInt(hour || 0), parseInt(minute || 0), parseInt(second || 0));
+    const endDate = new Date(startDate.getTime() + (60 * 60 * 1000));
+
+    function formatGCalDateTime(d) {
+      const pad = (n) => String(n).padStart(2, '0');
+      return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}T${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+    }
+
+    const startFormatted = formatGCalDateTime(startDate);
+    const endFormatted = formatGCalDateTime(endDate);
+
+    const title = `Presensi: ${name}`;
+    const description = `Bukti Kehadiran Resmi Smart QR Attendance.\n\nNama: ${name}\nHari: ${day}\nTanggal: ${date}\nJam Masuk: ${time} WIB\nKode Token: ${token}\nStatus: Hadir Terverifikasi`;
+    const location = `Sistem Presensi Smart QR`;
+
+    const gcalUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(title)}&dates=${startFormatted}/${endFormatted}&details=${encodeURIComponent(description)}&location=${encodeURIComponent(location)}`;
+    inlineBtnGCal.href = gcalUrl;
+
+    inlineBtnIcs.onclick = () => {
+      const nowIso = new Date().toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
+      const icsContent = [
+        'BEGIN:VCALENDAR',
+        'VERSION:2.0',
+        'PRODID:-//Smart QR Attendance Tool//ID',
+        'CALSCALE:GREGORIAN',
+        'METHOD:PUBLISH',
+        'BEGIN:VEVENT',
+        `UID:${token}-${Date.now()}@smartqr.local`,
+        `DTSTAMP:${nowIso}`,
+        `DTSTART:${startFormatted}`,
+        `DTEND:${endFormatted}`,
+        `SUMMARY:${title}`,
+        `DESCRIPTION:${description.replace(/\n/g, '\\n')}`,
+        `LOCATION:${location}`,
+        'STATUS:CONFIRMED',
+        'END:VEVENT',
+        'END:VCALENDAR'
+      ].join('\r\n');
+
+      const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
+      const link = document.createElement('a');
+      link.href = window.URL.createObjectURL(blob);
+      link.setAttribute('download', `Presensi-${name.replace(/\s+/g, '_')}-${date}.ics`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    };
+  }
+
+  // --- 3. ADMIN DASHBOARD ENGINE ---
+  let adminInitialized = false;
+  function initAdminDashboard() {
+    if (adminInitialized) return;
+    adminInitialized = true;
+
+    initTabs();
+    initClock();
+    initCloudMqtt();
+    bootAdminQr();
+    loadAuditData();
+    loadAttendanceData();
+    lucide.createIcons();
+  }
+
+  function initTabs() {
+    const tabs = [
+      { btn: tabBtnProjector, view: viewProjector },
+      { btn: tabBtnAudit, view: viewAudit, onShow: loadAuditData },
+      { btn: tabBtnAttendance, view: viewAttendance, onShow: loadAttendanceData }
+    ];
+
+    tabs.forEach(t => {
+      t.btn.addEventListener('click', () => {
+        tabs.forEach(item => {
+          item.btn.classList.remove('active', 'bg-indigo-600', 'text-white', 'shadow');
+          item.btn.classList.add('text-slate-400');
+          item.view.classList.add('hidden');
+        });
+
+        t.btn.classList.add('active', 'bg-indigo-600', 'text-white', 'shadow');
+        t.btn.classList.remove('text-slate-400');
+        t.view.classList.remove('hidden');
+
+        if (t.onShow) t.onShow();
+        lucide.createIcons();
+      });
+    });
+  }
+
+  function initClock() {
+    function update() {
+      const now = new Date();
+      if (liveClock) {
+        liveClock.textContent = now.toLocaleTimeString('id-ID', { hour12: false });
+      }
+      if (liveDate) {
+        liveDate.textContent = now.toLocaleDateString('id-ID', {
+          weekday: 'long',
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric'
+        });
+      }
+    }
+    update();
+    setInterval(update, 1000);
+  }
+
+  function generateRandomToken() {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let code = '';
+    for (let i = 0; i < 6; i++) {
+      code += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return `QR-${code}`;
   }
 
   function renderActiveQrCode(token) {
-    const base = getBaseAppUrl();
-    const attendUrl = `${base}attend.html?token=${encodeURIComponent(token)}&session=${encodeURIComponent(adminSessionId)}`;
-
     currentActiveToken = token;
     activeTokenText.textContent = token;
+
+    const currentUrl = new URL(window.location.href);
+    let basePath = currentUrl.pathname;
+    if (basePath.endsWith('index.html')) {
+      basePath = basePath.replace(/index\.html$/, 'attend.html');
+    } else if (basePath.endsWith('/')) {
+      basePath = basePath + 'attend.html';
+    } else {
+      basePath = basePath + '/attend.html';
+    }
+
+    const attendUrl = `${currentUrl.origin}${basePath}?token=${encodeURIComponent(token)}&session=${encodeURIComponent(adminSessionId)}`;
     mobileAccessUrl.textContent = attendUrl;
-    mobileAccessUrl.dataset.url = attendUrl;
 
     qrOverlayLoading.classList.remove('hidden');
-
-    // 1. Primary: High-speed QR Server Generator (Never fails, zero js dependencies)
-    const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&margin=8&data=${encodeURIComponent(attendUrl)}`;
-    qrImage.src = qrApiUrl;
     qrImage.classList.remove('hidden');
     qrCanvasContainer.classList.add('hidden');
+
+    const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&margin=10&data=${encodeURIComponent(attendUrl)}`;
+    qrImage.src = qrApiUrl;
 
     qrImage.onload = () => {
       qrOverlayLoading.classList.add('hidden');
     };
 
-    // 2. Fallback: If external image is blocked/offline, render via QRCode.js canvas
     qrImage.onerror = () => {
       if (typeof QRCode !== 'undefined') {
         qrCanvasContainer.innerHTML = '';
@@ -201,7 +618,6 @@ document.addEventListener('DOMContentLoaded', () => {
       qrOverlayLoading.classList.add('hidden');
     };
 
-    // Broadcast update to any open tabs
     if (broadcast) {
       broadcast.postMessage({ type: 'ACTIVE_TOKEN_UPDATED', token, sessionId: adminSessionId });
     }
@@ -230,7 +646,7 @@ document.addEventListener('DOMContentLoaded', () => {
     return newToken;
   }
 
-  // --- 4. ATTENDANCE VERIFICATION & RECORD ENGINE ---
+  // --- ATTENDANCE VERIFICATION & RECORD ENGINE ---
   function processAttendanceSubmission({ token, name, date, day, time, deviceId, deviceInfo }) {
     const tokens = getStoredTokens();
     const targetToken = tokens.find(t => t.token === token);
@@ -283,55 +699,38 @@ document.addEventListener('DOMContentLoaded', () => {
     targetToken.device_id = deviceId;
     saveTokens(tokens);
 
-    // Record attendance
-    const newRecord = {
+    // Save Attendance Record
+    const record = {
       id: Date.now(),
       token,
       name,
       date: targetDate,
-      day: day || 'Hari Ini',
-      time: time || new Date().toLocaleTimeString('id-ID', { hour12: false }),
+      day: day || getIndonesianDayName(localNow),
+      time: time || localNow.toLocaleTimeString('id-ID', { hour12: false }),
       device_id: deviceId,
-      device_info: deviceInfo || 'Perangkat Web',
+      device_info: deviceInfo || 'Perangkat Pengguna',
       created_at: now
     };
-
-    attendances.unshift(newRecord);
+    attendances.unshift(record);
     saveAttendances(attendances);
 
-    // Trigger Admin Events: Sound, Toast, Flash, and ROTATE QR!
-    handleAttendanceSuccessEvent(newRecord);
-
-    // Auto rotate to NEW QR immediately!
+    // Rotate to new active token immediately!
     createNewActiveToken();
 
-    return {
-      success: true,
-      message: 'Presensi berhasil diverifikasi!',
-      attendance: newRecord
-    };
-  }
-
-  function handleAttendanceSuccessEvent(record) {
+    // Trigger Success Audio & Visuals
     playSuccessChime();
-    triggerVisualFlash();
-    showToast(record.name, `Presensi pukul ${record.time} WIB. QR baru otomatis aktif!`);
-    addLiveActivityItem(record);
+    triggerScanFlash();
+    showToast('Presensi Berhasil!', `${name} telah diabsen.`);
+    addLiveActivity(record);
+    loadAuditData();
+    loadAttendanceData();
 
-    if (!viewAudit.classList.contains('hidden')) loadAuditData();
-    if (!viewAttendance.classList.contains('hidden')) loadAttendanceData();
-
-    if (broadcast) {
-      broadcast.postMessage({ type: 'ATTENDANCE_RECORDED', attendance: record });
-    }
+    return { success: true, attendance: record };
   }
 
-  // --- 5. CLOUD MULTI-PROVIDER REAL-TIME SYNC VIA MQTT WSS ---
+  // --- 4. CLOUD MQTT OVER WSS ---
   function initCloudMqtt() {
-    if (typeof mqtt === 'undefined') {
-      console.warn('MQTT library not available, using local sync.');
-      return;
-    }
+    if (typeof mqtt === 'undefined') return;
 
     const brokerUrl = 'wss://broker.emqx.io:8084/mqtt';
     const clientId = 'sqr_admin_' + Math.random().toString(16).substring(2, 10);
@@ -345,221 +744,76 @@ document.addEventListener('DOMContentLoaded', () => {
       });
 
       mqttClient.on('connect', () => {
-        console.log('Connected to Cloud Real-time MQTT Broker via WSS!');
-        syncBadgeText.textContent = 'Cloud Sync (Beda Provider Aktif)';
-
-        // Subscribe to submission channel for this admin session
+        syncBadgeText.textContent = 'Cloud Sync Aktif';
         const submitTopic = `smartqr/${adminSessionId}/submit`;
-        const checkTopic = `smartqr/${adminSessionId}/check`;
-
-        mqttClient.subscribe([submitTopic, checkTopic], (err) => {
-          if (!err) {
-            console.log(`Subscribed to ${submitTopic}`);
-          }
-        });
+        mqttClient.subscribe(submitTopic);
       });
 
       mqttClient.on('message', (topic, message) => {
         try {
           const payload = JSON.parse(message.toString());
-          if (topic.endsWith('/submit')) {
+          if (topic === `smartqr/${adminSessionId}/submit`) {
             const result = processAttendanceSubmission(payload);
-            // Send acknowledgement back to attendee
-            const respTopic = `smartqr/${adminSessionId}/resp/${payload.reqId}`;
-            mqttClient.publish(respTopic, JSON.stringify(result));
-          } else if (topic.endsWith('/check')) {
-            const tokens = getStoredTokens();
-            const t = tokens.find(item => item.token === payload.token);
-            let resp = { valid: true, status: 'ACTIVE', token: payload.token };
-            if (!t) {
-              resp = { valid: false, status: 'NOT_FOUND', message: 'QR Code tidak terdaftar.' };
-            } else if (t.status === 'USED') {
-              resp = { valid: false, status: 'USED', message: `QR Code ini sudah pernah digunakan oleh ${t.used_by_name || 'pengguna lain'}.` };
-            } else if (t.status === 'EXPIRED') {
-              resp = { valid: false, status: 'EXPIRED', message: 'QR Code sudah kedaluwarsa.' };
+            if (payload.reqId) {
+              const respTopic = `smartqr/${adminSessionId}/resp/${payload.reqId}`;
+              mqttClient.publish(respTopic, JSON.stringify(result));
             }
-            mqttClient.publish(`smartqr/${adminSessionId}/check_resp/${payload.reqId}`, JSON.stringify(resp));
           }
-        } catch (e) {
-          console.error('Error handling MQTT message:', e);
-        }
+        } catch (e) {}
       });
 
-      mqttClient.on('error', (err) => {
-        console.warn('MQTT connection error:', err);
+      mqttClient.on('error', () => {
+        syncBadgeText.textContent = 'Offline (Lokal Aktif)';
       });
     } catch (e) {
-      console.warn('Failed to start MQTT client:', e);
+      syncBadgeText.textContent = 'Offline (Lokal Aktif)';
     }
   }
 
-  // BroadcastChannel listener (same-browser testing)
-  if (broadcast) {
-    broadcast.onmessage = (event) => {
-      const data = event.data;
-      if (data && data.type === 'SUBMIT_FROM_TAB') {
-        const result = processAttendanceSubmission(data.payload);
-        broadcast.postMessage({ type: 'SUBMIT_RESPONSE_TAB', targetRequestId: data.requestId, result });
-      }
-    };
-  }
-
-  // --- 6. SERVER FALLBACK (Local Node.js) ---
-  async function checkForNodeServer() {
-    try {
-      const res = await fetch('/api/system/info');
-      if (res.ok) {
-        isServerMode = true;
-        syncBadgeText.textContent = 'Node Server Sync';
-        if (window.hasSocketIo && window.io) {
-          const socket = io();
-          socket.on('connect', () => {
-            socket.emit('request_active_qr', { host: window.location.host });
-          });
-          socket.on('active_qr_updated', (qrData) => {
-            if (qrData && qrData.qrImage) {
-              qrImage.src = qrData.qrImage;
-              activeTokenText.textContent = qrData.token;
-              mobileAccessUrl.textContent = qrData.url;
-              mobileAccessUrl.dataset.url = qrData.url;
-              currentActiveToken = qrData.token;
-              qrOverlayLoading.classList.add('hidden');
-            }
-          });
-          socket.on('attendance_recorded', (data) => {
-            playSuccessChime();
-            triggerVisualFlash();
-            showToast(data.attendance.name, `Presensi pukul ${data.attendance.time} WIB. QR baru telah dibuat!`);
-            addLiveActivityItem(data.attendance);
-            if (!viewAudit.classList.contains('hidden')) loadAuditData();
-            if (!viewAttendance.classList.contains('hidden')) loadAttendanceData();
-          });
-        }
-      }
-    } catch (e) {
-      isServerMode = false;
-    }
-  }
-
-  // Visual Effects
-  function triggerVisualFlash() {
-    qrCardBox.classList.remove('scan-flash');
-    void qrCardBox.offsetWidth;
+  function triggerScanFlash() {
     qrCardBox.classList.add('scan-flash');
+    setTimeout(() => qrCardBox.classList.remove('scan-flash'), 600);
   }
 
-  function showToast(name, detail) {
-    toastText.textContent = name;
-    toastDetail.textContent = detail;
-    toastNotification.classList.remove('translate-x-full');
+  function showToast(title, desc) {
+    if (!toastNotification) return;
+    toastText.textContent = title;
+    toastDetail.textContent = desc;
+    toastNotification.classList.remove('translate-x-full', 'pointer-events-none');
     setTimeout(() => {
-      toastNotification.classList.add('translate-x-full');
+      toastNotification.classList.add('translate-x-full', 'pointer-events-none');
     }, 4500);
   }
 
-  function addLiveActivityItem(att) {
+  function addLiveActivity(record) {
+    const emptyState = liveActivityList.querySelector('.text-center');
+    if (emptyState) emptyState.remove();
+
     const item = document.createElement('div');
-    item.className = 'p-2.5 rounded-xl bg-slate-950/80 border border-slate-800 flex items-center justify-between text-xs animate-fade-in';
+    item.className = 'p-3 bg-slate-950/70 border border-slate-800 rounded-xl flex items-center justify-between text-xs animate-fadeIn';
     item.innerHTML = `
-      <div class="flex items-center gap-2">
-        <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
-        <strong class="text-white">${escapeHtml(att.name)}</strong>
+      <div class="flex items-center gap-2.5">
+        <div class="w-7 h-7 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold text-xs">
+          ${escapeHtml(record.name.charAt(0).toUpperCase())}
+        </div>
+        <div>
+          <div class="font-bold text-white text-xs">${escapeHtml(record.name)}</div>
+          <div class="text-[10px] text-slate-400 font-mono">${escapeHtml(record.token)}</div>
+        </div>
       </div>
-      <span class="text-slate-400 font-mono text-[11px]">${att.time} WIB</span>
+      <div class="text-right">
+        <div class="text-emerald-400 font-mono font-semibold">${escapeHtml(record.time)}</div>
+        <div class="text-[10px] text-slate-500">${escapeHtml(record.device_info || 'Mobile')}</div>
+      </div>
     `;
 
-    if (liveActivityList.querySelector('.text-slate-500')) {
-      liveActivityList.innerHTML = '';
-    }
-    liveActivityList.prepend(item);
-
-    const currentCount = parseInt(liveFeedCount.dataset.count || '0') + 1;
-    liveFeedCount.dataset.count = currentCount;
-    liveFeedCount.textContent = `${currentCount} hadir`;
+    liveActivityList.insertBefore(item, liveActivityList.firstChild);
+    const count = liveActivityList.children.length;
+    liveFeedCount.textContent = `${count} hadir`;
   }
 
-  // Copy Mobile URL
-  btnCopyUrl.addEventListener('click', () => {
-    const url = mobileAccessUrl.dataset.url || mobileAccessUrl.textContent;
-    navigator.clipboard.writeText(url).then(() => {
-      btnCopyUrl.innerHTML = `<i data-lucide="check" class="w-4 h-4 text-emerald-400"></i>`;
-      lucide.createIcons();
-      setTimeout(() => {
-        btnCopyUrl.innerHTML = `<i data-lucide="copy" class="w-4 h-4"></i>`;
-        lucide.createIcons();
-      }, 2000);
-    });
-  });
-
-  // Manual QR Refresh
-  btnRefreshQr.addEventListener('click', async () => {
-    qrOverlayLoading.classList.remove('hidden');
-    if (isServerMode) {
-      try {
-        await fetch('/api/qr/refresh', { method: 'POST' });
-        showToast('QR Diperbarui', 'Token QR baru berhasil diaktifkan.');
-      } catch (e) {
-        alert('Gagal merefresh QR server.');
-      }
-    } else {
-      createNewActiveToken();
-      showToast('QR Diperbarui', 'Token QR lama hangus dan token baru aktif.');
-    }
-  });
-
-  // Fullscreen
-  btnFullscreen.addEventListener('click', () => {
-    if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().catch(err => alert(`Fullscreen error: ${err.message}`));
-    } else {
-      document.exitFullscreen();
-    }
-  });
-
-  // Tab Navigation
-  function setActiveTab(tabName) {
-    [tabBtnProjector, tabBtnAudit, tabBtnAttendance].forEach((btn) => {
-      btn.className = 'tab-btn px-3.5 py-2 rounded-lg transition flex items-center gap-2 text-slate-400 hover:text-slate-200';
-    });
-
-    viewProjector.classList.add('hidden');
-    viewAudit.classList.add('hidden');
-    viewAttendance.classList.add('hidden');
-
-    if (tabName === 'projector') {
-      tabBtnProjector.className = 'tab-btn active px-3.5 py-2 rounded-lg transition flex items-center gap-2 bg-indigo-600 text-white shadow';
-      viewProjector.classList.remove('hidden');
-    } else if (tabName === 'audit') {
-      tabBtnAudit.className = 'tab-btn active px-3.5 py-2 rounded-lg transition flex items-center gap-2 bg-indigo-600 text-white shadow';
-      viewAudit.classList.remove('hidden');
-      loadAuditData();
-    } else if (tabName === 'attendance') {
-      tabBtnAttendance.className = 'tab-btn active px-3.5 py-2 rounded-lg transition flex items-center gap-2 bg-indigo-600 text-white shadow';
-      viewAttendance.classList.remove('hidden');
-      loadAttendanceData();
-    }
-    lucide.createIcons();
-  }
-
-  tabBtnProjector.addEventListener('click', () => setActiveTab('projector'));
-  tabBtnAudit.addEventListener('click', () => setActiveTab('audit'));
-  tabBtnAttendance.addEventListener('click', () => setActiveTab('attendance'));
-
-  // --- 7. TAB 2: AUDIT LOG DATA ---
-  async function loadAuditData() {
-    let tokens = [];
-    if (isServerMode) {
-      try {
-        const res = await fetch('/api/qr/audit?limit=100');
-        const data = await res.json();
-        tokens = data.history || [];
-      } catch (e) {
-        tokens = getStoredTokens();
-      }
-    } else {
-      tokens = getStoredTokens();
-    }
-
+  function loadAuditData() {
+    const tokens = getStoredTokens();
     const total = tokens.length;
     const active = tokens.filter(t => t.status === 'ACTIVE').length;
     const used = tokens.filter(t => t.status === 'USED').length;
@@ -575,128 +829,111 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    auditTableBody.innerHTML = tokens.map((item) => {
-      let statusBadge = '';
-      if (item.status === 'ACTIVE') {
-        statusBadge = `<span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
-          <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span> AKTIF
-        </span>`;
-      } else if (item.status === 'USED') {
-        statusBadge = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/40">
-          <i data-lucide="check" class="w-3 h-3"></i> 1x TERPAKAI
-        </span>`;
+    auditTableBody.innerHTML = tokens.slice(0, 50).map(t => {
+      let badge = '';
+      if (t.status === 'ACTIVE') {
+        badge = '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">AKTIF</span>';
+      } else if (t.status === 'USED') {
+        badge = '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-500/15 text-indigo-400 border border-indigo-500/30">TERPAKAI</span>';
       } else {
-        statusBadge = `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-800 text-slate-400 border border-slate-700">
-          HANGUS / EXPIRED
-        </span>`;
+        badge = '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-800 text-slate-400 border border-slate-700">KEDALUWARSA</span>';
       }
 
-      const usedName = item.used_by_name ? `<span class="font-bold text-white">${escapeHtml(item.used_by_name)}</span>` : '<span class="text-slate-500 italic">Belum digunakan</span>';
-      const device = item.device_id ? `<span class="font-mono text-slate-400" title="${escapeHtml(item.device_id)}">${escapeHtml(item.device_id.substring(0, 16))}...</span>` : '<span class="text-slate-500">-</span>';
-      const usedAtTime = item.used_at ? new Date(item.used_at).toLocaleTimeString('id-ID') + ' WIB' : '<span class="text-slate-500">-</span>';
-      const createdAtTime = new Date(item.created_at).toLocaleTimeString('id-ID') + ' WIB';
-
       return `
-        <tr class="hover:bg-slate-900/60 transition">
-          <td class="py-3 px-4">${statusBadge}</td>
-          <td class="py-3 px-4 font-mono font-bold text-indigo-300">${escapeHtml(item.token)}</td>
-          <td class="py-3 px-4">${usedName}</td>
-          <td class="py-3 px-4">${device}</td>
-          <td class="py-3 px-4 text-slate-400">${createdAtTime}</td>
-          <td class="py-3 px-4 text-emerald-400">${usedAtTime}</td>
+        <tr class="hover:bg-slate-800/40 transition">
+          <td class="py-3 px-4">${badge}</td>
+          <td class="py-3 px-4 font-mono text-indigo-300 font-bold">${escapeHtml(t.token)}</td>
+          <td class="py-3 px-4 font-semibold text-white">${escapeHtml(t.used_by_name || '-')}</td>
+          <td class="py-3 px-4 font-mono text-[11px] text-slate-400 truncate max-w-[150px]">${escapeHtml(t.device_id || '-')}</td>
+          <td class="py-3 px-4 text-slate-400 text-[11px]">${t.created_at ? new Date(t.created_at).toLocaleTimeString('id-ID') : '-'}</td>
+          <td class="py-3 px-4 text-slate-400 text-[11px]">${t.used_at ? new Date(t.used_at).toLocaleTimeString('id-ID') : '-'}</td>
         </tr>
       `;
     }).join('');
-
-    lucide.createIcons();
   }
 
-  btnRefreshAudit.addEventListener('click', loadAuditData);
+  function loadAttendanceData() {
+    const all = getStoredAttendances();
+    const todayStr = getLocalDateString(new Date());
 
-  // --- 8. TAB 3: ATTENDANCE RECORDS ---
-  let cachedAttendances = [];
-
-  async function loadAttendanceData() {
-    if (isServerMode) {
-      try {
-        const dateVal = filterDate.value;
-        let url = '/api/attendance/list?limit=500';
-        if (dateVal) url += `&date=${encodeURIComponent(dateVal)}`;
-        const res = await fetch(url);
-        const data = await res.json();
-        cachedAttendances = data.records || [];
-      } catch (e) {
-        cachedAttendances = getStoredAttendances();
-      }
-    } else {
-      cachedAttendances = getStoredAttendances();
-    }
-
-    const todayStr = new Date().toISOString().split('T')[0];
-    const todayCount = cachedAttendances.filter(a => a.date === todayStr).length;
-    const uniqueDevs = new Set(cachedAttendances.map(a => a.device_id)).size;
+    const todayCount = all.filter(a => a.date === todayStr).length;
+    const uniqueDevices = new Set(all.map(a => a.device_id)).size;
 
     metricToday.textContent = todayCount;
-    metricTotalRecords.textContent = cachedAttendances.length;
-    metricUniqueDevices.textContent = uniqueDevs;
+    metricTotalRecords.textContent = all.length;
+    metricUniqueDevices.textContent = uniqueDevices;
 
-    renderAttendanceTable();
-  }
+    const sTerm = (filterSearch.value || '').toLowerCase();
+    const fDate = filterDate.value || '';
 
-  function renderAttendanceTable() {
-    const searchTerm = (filterSearch.value || '').toLowerCase().trim();
-    const dateFilter = filterDate.value;
-
-    const filtered = cachedAttendances.filter((att) => {
-      const matchName = (att.name || '').toLowerCase().includes(searchTerm);
-      const matchDevice = (att.device_info || '').toLowerCase().includes(searchTerm) || (att.device_id || '').toLowerCase().includes(searchTerm);
-      const matchToken = (att.token || '').toLowerCase().includes(searchTerm);
-      const matchDate = !dateFilter || att.date === dateFilter;
-      return (matchName || matchDevice || matchToken) && matchDate;
+    const filtered = all.filter(a => {
+      const matchSearch = !sTerm || a.name.toLowerCase().includes(sTerm) || (a.device_info || '').toLowerCase().includes(sTerm) || a.token.toLowerCase().includes(sTerm);
+      const matchDate = !fDate || a.date === fDate;
+      return matchSearch && matchDate;
     });
 
     if (filtered.length === 0) {
-      attendanceTableBody.innerHTML = `<tr><td colspan="6" class="py-8 text-center text-slate-500">Tidak ada data kehadiran yang sesuai.</td></tr>`;
+      attendanceTableBody.innerHTML = `<tr><td colspan="6" class="py-8 text-center text-slate-500">Tidak ada data presensi yang cocok.</td></tr>`;
       return;
     }
 
-    attendanceTableBody.innerHTML = filtered.map((att, idx) => {
-      return `
-        <tr class="hover:bg-slate-900/60 transition">
-          <td class="py-3 px-4 text-center text-slate-500 font-mono">${idx + 1}</td>
-          <td class="py-3 px-4 font-bold text-white">${escapeHtml(att.name)}</td>
-          <td class="py-3 px-4 text-indigo-300 font-medium">${escapeHtml(att.day)}, ${escapeHtml(att.date)}</td>
-          <td class="py-3 px-4 text-emerald-400 font-mono">${escapeHtml(att.time)} WIB</td>
-          <td class="py-3 px-4 font-mono text-slate-400 text-[11px]">${escapeHtml(att.token)}</td>
-          <td class="py-3 px-4 text-slate-400 text-[11px]">
-            <div class="truncate max-w-xs" title="${escapeHtml(att.device_info || '')}">${escapeHtml(att.device_info || '-')}</div>
-            <div class="text-[10px] text-slate-500 font-mono truncate" title="${escapeHtml(att.device_id)}">${escapeHtml(att.device_id)}</div>
-          </td>
-        </tr>
-      `;
-    }).join('');
-
-    lucide.createIcons();
+    attendanceTableBody.innerHTML = filtered.map((a, idx) => `
+      <tr class="hover:bg-slate-800/40 transition">
+        <td class="py-3 px-4 text-center text-slate-500 font-mono">${idx + 1}</td>
+        <td class="py-3 px-4 font-bold text-white">${escapeHtml(a.name)}</td>
+        <td class="py-3 px-4 text-slate-300">${escapeHtml(a.day)}, ${escapeHtml(a.date)}</td>
+        <td class="py-3 px-4 font-mono text-emerald-400 font-semibold">${escapeHtml(a.time)}</td>
+        <td class="py-3 px-4 font-mono text-indigo-300 text-xs">${escapeHtml(a.token)}</td>
+        <td class="py-3 px-4 text-slate-400 text-xs">${escapeHtml(a.device_info || 'Perangkat')}</td>
+      </tr>
+    `).join('');
   }
 
-  filterSearch.addEventListener('input', renderAttendanceTable);
-  filterDate.addEventListener('change', renderAttendanceTable);
+  // Copy URL & Buttons
+  btnCopyUrl.addEventListener('click', () => {
+    const url = mobileAccessUrl.textContent;
+    navigator.clipboard.writeText(url).then(() => {
+      showToast('Link Disalin', 'URL presensi siap dibagikan.');
+    });
+  });
+
+  btnRefreshQr.addEventListener('click', () => {
+    createNewActiveToken();
+    showToast('QR Diperbarui', 'Kode QR baru telah dibuat.');
+  });
+
+  btnRefreshAudit.addEventListener('click', () => {
+    loadAuditData();
+    showToast('Log Disinkronkan', 'Data riwayat QR terbaru dimuat.');
+  });
+
+  btnFullscreen.addEventListener('click', () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(() => {});
+    } else {
+      document.exitFullscreen().catch(() => {});
+    }
+  });
+
+  filterSearch.addEventListener('input', loadAttendanceData);
+  filterDate.addEventListener('change', loadAttendanceData);
   btnResetFilter.addEventListener('click', () => {
     filterSearch.value = '';
     filterDate.value = '';
-    renderAttendanceTable();
+    loadAttendanceData();
   });
 
   // Export CSV
   btnExportCsv.addEventListener('click', () => {
-    if (!cachedAttendances || cachedAttendances.length === 0) {
-      alert('Belum ada data presensi untuk diexport.');
+    const records = getStoredAttendances();
+    if (records.length === 0) {
+      alert('Belum ada data presensi untuk diekspor!');
       return;
     }
 
-    const headers = ['No', 'Nama Lengkap', 'Hari', 'Tanggal', 'Jam Masuk', 'Token QR', 'Device ID', 'Info Perangkat'];
-    const rows = cachedAttendances.map((att, index) => [
-      index + 1,
+    const headers = ['ID', 'Nama Lengkap', 'Hari', 'Tanggal', 'Jam Hadir', 'Token QR', 'Device ID', 'Device Info'];
+    const rows = records.map(att => [
+      att.id,
       `"${att.name.replace(/"/g, '""')}"`,
       `"${att.day}"`,
       `"${att.date}"`,
@@ -722,12 +959,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const confirmation = confirm('PERINGATAN:\n\nApakah Anda yakin ingin MENGHAPUS SEMUA data presensi dan riwayat QR?\nTindakan ini tidak dapat dibatalkan.');
     if (!confirmation) return;
 
-    if (isServerMode) {
-      try {
-        await fetch('/api/admin/reset', { method: 'POST' });
-      } catch (e) {}
-    }
-
     saveTokens([]);
     saveAttendances([]);
     createNewActiveToken();
@@ -735,6 +966,16 @@ document.addEventListener('DOMContentLoaded', () => {
     loadAttendanceData();
     showToast('Data Direset', 'Semua data telah dikosongkan.');
   });
+
+  function bootAdminQr() {
+    const tokens = getStoredTokens();
+    const active = tokens.find(t => t.status === 'ACTIVE');
+    if (active) {
+      renderActiveQrCode(active.token);
+    } else {
+      createNewActiveToken();
+    }
+  }
 
   function escapeHtml(str) {
     if (!str) return '';
@@ -746,21 +987,6 @@ document.addEventListener('DOMContentLoaded', () => {
       .replace(/'/g, '&#039;');
   }
 
-  // Initial Boot
-  async function init() {
-    await checkForNodeServer();
-
-    if (!isServerMode) {
-      initCloudMqtt();
-      const tokens = getStoredTokens();
-      const active = tokens.find(t => t.status === 'ACTIVE');
-      if (active) {
-        renderActiveQrCode(active.token);
-      } else {
-        createNewActiveToken();
-      }
-    }
-  }
-
-  init();
+  // --- BOOT ENTRYPOINT ---
+  checkAuthStatus();
 });

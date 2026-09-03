@@ -3,15 +3,17 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Smart QR Attendance Tool - Layar Proyektor & Admin</title>
+  <title>Presensi QR - Layar & Absensi</title>
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Lucide Icons CDN -->
   <script src="https://unpkg.com/lucide@latest"></script>
-  <!-- Fast Reliable QR Code Library CDN -->
+  <!-- QR Code Library CDN -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-  <!-- Cloud Real-time MQTT WSS Client for Multi-Provider / Non-Wi-Fi Sync -->
+  <!-- Cloud Real-time MQTT WSS Client -->
   <script src="https://unpkg.com/mqtt@5.10.4/dist/mqtt.min.js"></script>
+  <!-- In-browser Camera QR Scanner -->
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <!-- Optional Socket.io (if running via local Node.js server) -->
   <script>window.hasSocketIo = false;</script>
   <script src="/socket.io/socket.io.js" onerror="window.hasSocketIo=false" onload="window.hasSocketIo=true"></script>
@@ -38,408 +40,639 @@
     .scan-flash {
       animation: scanSuccessFlash 0.6s ease-out;
     }
+    #qrScannerView video {
+      border-radius: 1rem;
+      object-fit: cover;
+    }
   </style>
 </head>
 <body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col antialiased selection:bg-indigo-500 selection:text-white">
 
-  <!-- Atmospheric Background Gradients -->
+  <!-- Background Glow -->
   <div class="fixed inset-0 overflow-hidden pointer-events-none -z-10">
     <div class="absolute -top-32 -left-32 w-96 h-96 bg-indigo-600/15 rounded-full blur-3xl"></div>
     <div class="absolute top-1/2 -right-32 w-96 h-96 bg-emerald-600/15 rounded-full blur-3xl"></div>
     <div class="absolute -bottom-32 left-1/3 w-96 h-96 bg-purple-600/10 rounded-full blur-3xl"></div>
   </div>
 
-  <!-- Header & Top Navigation -->
-  <header class="border-b border-slate-800/80 bg-slate-900/70 backdrop-blur-lg sticky top-0 z-40">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 flex flex-wrap items-center justify-between gap-4">
-      
-      <!-- Brand Logo & Realtime Status -->
-      <div class="flex items-center space-x-3">
-        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-500 to-emerald-400 flex items-center justify-center shadow-lg shadow-indigo-500/25">
-          <i data-lucide="qr-code" class="w-5 h-5 text-white"></i>
-        </div>
-        <div>
-          <div class="flex items-center gap-2">
-            <h1 class="font-extrabold text-base sm:text-lg text-white tracking-tight">Smart QR Attendance</h1>
-            <span id="syncBadge" class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
-              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
-              <span id="syncBadgeText">Cloud Sync (Beda Provider)</span>
-            </span>
-          </div>
-          <p class="text-xs text-slate-400">1x Scan per Device &bull; Anti-Double QR &bull; Google Calendar Ready</p>
-        </div>
+  <!-- ======================================================== -->
+  <!-- MODAL 1: INITIAL GATE POPUP (ADMIN LOGIN vs ISI ABSENSI) -->
+  <!-- ======================================================== -->
+  <div id="gateModal" class="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl space-y-6 text-center relative overflow-hidden">
+      <div class="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-indigo-500 via-purple-500 to-emerald-400"></div>
+
+      <div class="w-16 h-16 rounded-2xl bg-indigo-500/15 text-indigo-400 mx-auto flex items-center justify-center border border-indigo-500/25">
+        <i data-lucide="qr-code" class="w-8 h-8"></i>
       </div>
 
-      <!-- Navigation Tabs -->
-      <nav class="flex items-center bg-slate-900/90 p-1 rounded-xl border border-slate-800 text-xs font-semibold">
-        <button id="tabBtnProjector" class="tab-btn active px-3.5 py-2 rounded-lg transition flex items-center gap-2 bg-indigo-600 text-white shadow">
-          <i data-lucide="projector" class="w-4 h-4"></i>
-          <span>Layar Proyektor QR</span>
-        </button>
-        <button id="tabBtnAudit" class="tab-btn px-3.5 py-2 rounded-lg transition flex items-center gap-2 text-slate-400 hover:text-slate-200">
-          <i data-lucide="shield-check" class="w-4 h-4"></i>
-          <span>Audit QR Anti-Double</span>
-        </button>
-        <button id="tabBtnAttendance" class="tab-btn px-3.5 py-2 rounded-lg transition flex items-center gap-2 text-slate-400 hover:text-slate-200">
-          <i data-lucide="clipboard-list" class="w-4 h-4"></i>
-          <span>Data Presensi</span>
-        </button>
-      </nav>
-
-      <!-- Live Clock -->
-      <div class="hidden lg:flex items-center space-x-3 text-right">
-        <div>
-          <div id="liveClock" class="font-mono text-sm font-bold text-slate-200">--:--:--</div>
-          <div id="liveDate" class="text-[11px] text-slate-400">--</div>
-        </div>
-      </div>
-
-    </div>
-  </header>
-
-  <!-- Live Toast Banner for In-Coming Attendance -->
-  <div id="toastNotification" class="fixed top-20 right-4 z-50 transform translate-x-full transition-transform duration-300 pointer-events-none max-w-sm">
-    <div class="bg-slate-900/95 border border-emerald-500/50 rounded-2xl p-4 shadow-2xl backdrop-blur-xl flex items-start gap-3">
-      <div class="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
-        <i data-lucide="user-check" class="w-5 h-5"></i>
-      </div>
       <div>
-        <div class="flex items-center gap-2">
-          <span class="text-xs font-bold text-emerald-400">Presensi Berhasil Diterima!</span>
-          <span class="text-[10px] text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded font-mono">1x Scan</span>
-        </div>
-        <p id="toastText" class="text-sm font-semibold text-white mt-0.5">Nama Peserta</p>
-        <p id="toastDetail" class="text-[11px] text-slate-400 mt-0.5">QR otomatis diganti ke token baru.</p>
+        <h2 class="text-2xl font-extrabold text-white tracking-tight">Presensi QR</h2>
+        <p class="text-xs text-slate-400 mt-1">Silakan pilih menu untuk melanjutkan</p>
       </div>
+
+      <div class="space-y-3 pt-2">
+        <!-- Button 1: Admin Login -->
+        <button id="btnOpenAdminLogin" type="button"
+          class="w-full py-3.5 px-4 rounded-2xl bg-slate-800 hover:bg-slate-700/80 border border-slate-700 text-slate-200 font-semibold text-sm transition flex items-center justify-between group">
+          <div class="flex items-center gap-3 text-left">
+            <div class="w-9 h-9 rounded-xl bg-slate-900 border border-slate-700 flex items-center justify-center text-slate-300 group-hover:text-indigo-400 transition">
+              <i data-lucide="shield-lock" class="w-4 h-4"></i>
+            </div>
+            <div>
+              <div class="text-white font-bold text-sm">Admin Login</div>
+              <div class="text-[11px] text-slate-400">Buka layar QR & rekap data</div>
+            </div>
+          </div>
+          <i data-lucide="chevron-right" class="w-4 h-4 text-slate-500 group-hover:text-white transition"></i>
+        </button>
+
+        <!-- Button 2: Isi Absensi (Kamera) -->
+        <button id="btnOpenScan" type="button"
+          class="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-indigo-600 to-emerald-600 hover:from-indigo-500 hover:to-emerald-500 text-white font-bold text-sm shadow-lg shadow-indigo-600/25 transition flex items-center justify-between group">
+          <div class="flex items-center gap-3 text-left">
+            <div class="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center text-white">
+              <i data-lucide="camera" class="w-4 h-4"></i>
+            </div>
+            <div>
+              <div class="font-bold text-sm">Isi Absensi</div>
+              <div class="text-[11px] text-indigo-100/80">Scan kamera untuk absen hari ini</div>
+            </div>
+          </div>
+          <i data-lucide="arrow-right" class="w-4 h-4 text-white/70 group-hover:text-white transition"></i>
+        </button>
+      </div>
+
+      <p class="text-[11px] text-slate-500 pt-2">
+        1 perangkat fisik hanya bisa absen 1 kali per hari.
+      </p>
     </div>
   </div>
 
-  <!-- MAIN VIEWPORT -->
-  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-1 w-full">
 
-    <!-- ======================================================== -->
-    <!-- TAB 1: LAYAR PROYEKTOR QR DINAMIS                        -->
-    <!-- ======================================================== -->
-    <section id="viewProjector" class="space-y-6">
+  <!-- ======================================================== -->
+  <!-- MODAL 2: ADMIN LOGIN POPUP                               -->
+  <!-- ======================================================== -->
+  <div id="adminLoginModal" class="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4 hidden">
+    <div class="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 max-w-sm w-full shadow-2xl space-y-5 text-center relative overflow-hidden">
       
-      <!-- Top Instructions Banner -->
-      <div class="bg-gradient-to-r from-slate-900/90 via-indigo-950/40 to-slate-900/90 border border-slate-800 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-4">
-        <div class="flex items-center gap-3">
-          <div class="p-2 rounded-xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
-            <i data-lucide="globe" class="w-5 h-5"></i>
-          </div>
-          <div>
-            <h2 class="text-sm font-bold text-white">Layar Presensi Online (Bisa Beda Provider / Kuota HP)</h2>
-            <p class="text-xs text-slate-400">
-              Pengguna bisa scan dari mana saja (Telkomsel, Indosat, XL, Wi-Fi lain). Setiap QR hangus setelah 1x pakai per device.
-            </p>
-          </div>
-        </div>
-
-        <div class="flex items-center gap-2">
-          <button id="btnRefreshQr" class="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-medium transition flex items-center gap-2">
-            <i data-lucide="refresh-cw" class="w-4 h-4"></i>
-            <span>Ganti QR Manual</span>
-          </button>
-          <button id="btnFullscreen" class="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-lg shadow-indigo-600/20 transition flex items-center gap-2">
-            <i data-lucide="maximize" class="w-4 h-4"></i>
-            <span>Fullscreen</span>
-          </button>
-        </div>
+      <div class="w-12 h-12 rounded-xl bg-indigo-500/15 text-indigo-400 mx-auto flex items-center justify-center border border-indigo-500/25">
+        <i data-lucide="lock" class="w-6 h-6"></i>
       </div>
 
-      <!-- Center Projector Grid -->
-      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
+      <div>
+        <h3 class="text-xl font-bold text-white">Login Admin</h3>
+        <p class="text-xs text-slate-400 mt-0.5">Masukkan username dan password admin</p>
+      </div>
+
+      <!-- Error Alert -->
+      <div id="loginError" class="p-3 rounded-xl bg-red-500/15 border border-red-500/30 text-red-300 text-xs text-left hidden flex items-center gap-2">
+        <i data-lucide="alert-circle" class="w-4 h-4 shrink-0 text-red-400"></i>
+        <span id="loginErrorText">Username atau password salah!</span>
+      </div>
+
+      <form id="formAdminLogin" class="space-y-3.5 text-left">
+        <div>
+          <label class="block text-xs font-semibold text-slate-300 mb-1">Username</label>
+          <input type="text" id="inputUsername" required placeholder="Masukkan username..."
+            class="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition">
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-300 mb-1">Password</label>
+          <div class="relative">
+            <input type="password" id="inputPassword" required placeholder="Masukkan password..."
+              class="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition pr-10">
+            <button type="button" id="btnTogglePassword" class="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-white">
+              <i data-lucide="eye" class="w-4 h-4" id="eyeIcon"></i>
+            </button>
+          </div>
+        </div>
+
+        <div class="pt-2 flex gap-2">
+          <button type="button" id="btnCancelLogin"
+            class="w-1/2 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition">
+            Kembali
+          </button>
+          <button type="submit"
+            class="w-1/2 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-lg shadow-indigo-600/25 transition">
+            Masuk
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+
+  <!-- ======================================================== -->
+  <!-- MODAL 3: IN-APP CAMERA SCANNER FOR "ISI ABSENSI"         -->
+  <!-- ======================================================== -->
+  <div id="cameraScanModal" class="fixed inset-0 z-50 bg-slate-950/95 backdrop-blur-md flex items-center justify-center p-4 hidden">
+    <div class="bg-slate-900 border border-slate-800 rounded-3xl p-5 sm:p-6 max-w-md w-full shadow-2xl space-y-4 text-center">
+      <div class="flex items-center justify-between pb-2 border-b border-slate-800">
+        <div class="flex items-center gap-2">
+          <i data-lucide="camera" class="w-4 h-4 text-indigo-400"></i>
+          <span class="font-bold text-sm text-white">Scan QR Presensi</span>
+        </div>
+        <button id="btnCloseCamera" class="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <p class="text-xs text-slate-400">
+        Izinkan akses kamera dan arahkan lensa ke QR Code di layar admin.
+      </p>
+
+      <div id="cameraViewContainer" class="rounded-2xl overflow-hidden border-2 border-indigo-500/40 bg-black min-h-[260px] flex items-center justify-center relative">
+        <div id="qrScannerView" class="w-full"></div>
+      </div>
+
+      <p class="text-[11px] text-slate-500">
+        Pastikan QR Code terlihat jelas dan tidak buram.
+      </p>
+    </div>
+  </div>
+
+
+  <!-- ======================================================== -->
+  <!-- MODAL 4: INLINE ATTENDANCE FORM (AFTER SCAN)             -->
+  <!-- ======================================================== -->
+  <div id="attendInlineModal" class="fixed inset-0 z-50 bg-slate-950/95 backdrop-blur-md flex items-center justify-center p-4 hidden">
+    <div class="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-5 relative">
+      
+      <!-- Top Bar -->
+      <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+        <div class="flex items-center gap-2">
+          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+          <span class="font-bold text-sm text-white">Formulir Presensi</span>
+        </div>
+        <span id="inlineTokenBadge" class="font-mono text-[11px] text-indigo-300 bg-slate-800 px-2 py-0.5 rounded border border-slate-700">QR-TOKEN</span>
+      </div>
+
+      <!-- Form Section -->
+      <div id="inlineFormWrapper" class="space-y-4">
+        <div>
+          <h4 class="text-base font-bold text-white">Isi Identitas Kehadiran</h4>
+          <p class="text-xs text-slate-400">Lengkapi nama Anda untuk mencatat kehadiran.</p>
+        </div>
+
+        <form id="inlineAttendForm" class="space-y-3.5">
+          <!-- Nama -->
+          <div class="space-y-1">
+            <label class="block text-xs font-semibold text-slate-300">Nama Lengkap <span class="text-red-400">*</span></label>
+            <input type="text" id="inlineInputName" required placeholder="Masukkan nama lengkap..."
+              class="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-700 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition">
+          </div>
+
+          <!-- Tanggal & Hari (Locked to Today) -->
+          <div class="grid grid-cols-2 gap-3">
+            <div class="space-y-1">
+              <div class="flex justify-between items-center">
+                <label class="block text-xs font-semibold text-slate-300">Tanggal</label>
+                <span class="text-[10px] text-amber-400 font-medium">Terkunci</span>
+              </div>
+              <input type="date" id="inlineInputDate" readonly
+                class="w-full px-3 py-2 bg-slate-800/60 border border-slate-700 rounded-xl text-xs text-indigo-300 font-semibold cursor-not-allowed">
+            </div>
+
+            <div class="space-y-1">
+              <div class="flex justify-between items-center">
+                <label class="block text-xs font-semibold text-slate-300">Hari</label>
+                <span class="text-[10px] text-emerald-400 font-medium">Hari Ini</span>
+              </div>
+              <input type="text" id="inlineInputDay" readonly
+                class="w-full px-3 py-2 bg-slate-800/60 border border-slate-700 rounded-xl text-xs text-indigo-300 font-semibold cursor-not-allowed">
+            </div>
+          </div>
+
+          <!-- Device Signature -->
+          <div class="p-2.5 bg-slate-950/80 rounded-xl border border-slate-800 text-[11px] text-slate-400 flex items-center justify-between">
+            <span class="flex items-center gap-1.5">
+              <i data-lucide="shield-check" class="w-3.5 h-3.5 text-emerald-400"></i>
+              <span>Perangkat:</span>
+            </span>
+            <span id="inlineDeviceLabel" class="font-mono text-slate-300 truncate max-w-[200px]">Mendeteksi...</span>
+          </div>
+
+          <div class="pt-2 flex gap-2">
+            <button type="button" id="btnCancelInline"
+              class="w-1/3 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition">
+              Batal
+            </button>
+            <button type="submit" id="btnSubmitInline"
+              class="w-2/3 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-emerald-600 hover:from-indigo-500 hover:to-emerald-500 text-white font-bold text-xs shadow-lg shadow-indigo-600/25 transition flex items-center justify-center gap-2">
+              <i data-lucide="check" class="w-4 h-4"></i>
+              <span>Kirim Presensi</span>
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <!-- Success Section -->
+      <div id="inlineSuccessWrapper" class="space-y-4 text-center hidden">
+        <div class="w-14 h-14 rounded-full bg-emerald-500/15 border-2 border-emerald-500/40 text-emerald-400 mx-auto flex items-center justify-center">
+          <i data-lucide="check" class="w-7 h-7"></i>
+        </div>
+
+        <div>
+          <h4 class="text-lg font-bold text-white">Presensi Berhasil!</h4>
+          <p class="text-xs text-slate-400 mt-0.5">Kehadiran Anda telah resmi tercatat di sistem.</p>
+        </div>
+
+        <div class="bg-slate-950/80 rounded-xl p-3 border border-slate-800 text-left text-xs space-y-1.5">
+          <div class="flex justify-between">
+            <span class="text-slate-400">Nama</span>
+            <span id="inlineSuccName" class="font-bold text-white"></span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-slate-400">Tanggal</span>
+            <span id="inlineSuccDate" class="text-indigo-300 font-medium"></span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-slate-400">Jam Masuk</span>
+            <span id="inlineSuccTime" class="text-emerald-400 font-medium font-mono"></span>
+          </div>
+        </div>
+
+        <!-- Google Calendar Button -->
+        <div class="space-y-2 pt-1">
+          <a id="inlineBtnGCal" href="#" target="_blank" rel="noopener noreferrer"
+            class="w-full py-3 px-4 bg-white hover:bg-slate-100 text-slate-950 font-bold text-xs rounded-xl shadow-lg transition flex items-center justify-center gap-2">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+              <path fill="#4285F4" d="M22 6c0-1.1-.9-2-2-2h-3V2h-2v2H9V2H7v2H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6z"/>
+              <path fill="#34A853" d="M4 8h16v12H4z"/>
+              <path fill="#FBBC05" d="M4 8h5v5H4z"/>
+              <path fill="#EA4335" d="M15 8h5v5h-5z"/>
+            </svg>
+            <span>Tambahkan ke Google Calendar</span>
+          </a>
+
+          <button id="inlineBtnIcs" type="button"
+            class="w-full py-2 px-4 bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium text-xs rounded-xl transition border border-slate-700">
+            Unduh File Kalender (.ics)
+          </button>
+        </div>
+
+        <button id="btnFinishInline" type="button"
+          class="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-semibold text-xs transition">
+          Selesai
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+
+  <!-- ======================================================== -->
+  <!-- MAIN ADMIN DASHBOARD (LOCKED BY DEFAULT)                 -->
+  <!-- ======================================================== -->
+  <div id="adminDashboardWrapper" class="hidden flex-1 flex flex-col">
+    
+    <!-- Admin Header -->
+    <header class="border-b border-slate-800/80 bg-slate-900/70 backdrop-blur-lg sticky top-0 z-40">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 flex flex-wrap items-center justify-between gap-4">
         
-        <!-- Left / QR Display Card (lg: 7 cols) -->
-        <div class="lg:col-span-7 flex flex-col items-center justify-center">
-          
-          <div id="qrCardBox" class="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 text-center max-w-md w-full relative qr-card-glow transition-all duration-300">
-            
-            <!-- Top Status Pill -->
-            <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs font-semibold mb-4">
-              <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
-              <span>QR AKTIF &bull; MENUNGGU SCAN</span>
+        <!-- Brand Logo & Status -->
+        <div class="flex items-center space-x-3">
+          <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-500 to-emerald-400 flex items-center justify-center shadow-lg shadow-indigo-500/25">
+            <i data-lucide="qr-code" class="w-5 h-5 text-white"></i>
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <h1 class="font-extrabold text-base sm:text-lg text-white tracking-tight">Presensi QR</h1>
+              <span id="syncBadge" class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
+                <span id="syncBadgeText">Cloud Sync Aktif</span>
+              </span>
             </div>
+            <p class="text-xs text-slate-400">1x Scan per Perangkat &bull; Kunci Tanggal Hari Ini</p>
+          </div>
+        </div>
 
-            <!-- QR Code Container -->
-            <div class="bg-white p-4 rounded-2xl shadow-2xl inline-block border-4 border-slate-800 mb-4 relative group min-w-[280px] min-h-[280px]">
-              <!-- Primary Image QR Element -->
-              <img id="qrImage" src="" alt="Dynamic Attendance QR" class="w-64 h-64 sm:w-72 sm:h-72 object-contain mx-auto block select-none">
-              <!-- Secondary Canvas QR Element (fallback) -->
-              <div id="qrCanvasContainer" class="hidden w-64 h-64 sm:w-72 sm:h-72 flex items-center justify-center mx-auto"></div>
-              
-              <div id="qrOverlayLoading" class="absolute inset-0 bg-white/95 backdrop-blur-sm flex flex-col items-center justify-center rounded-xl transition-opacity">
-                <div class="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
-                <span class="text-xs font-bold text-slate-800 mt-2">Memuat QR Code...</span>
-              </div>
+        <!-- Navigation Tabs -->
+        <nav class="flex items-center bg-slate-900/90 p-1 rounded-xl border border-slate-800 text-xs font-semibold">
+          <button id="tabBtnProjector" class="tab-btn active px-3.5 py-2 rounded-lg transition flex items-center gap-2 bg-indigo-600 text-white shadow">
+            <i data-lucide="projector" class="w-4 h-4"></i>
+            <span>Layar QR</span>
+          </button>
+          <button id="tabBtnAudit" class="tab-btn px-3.5 py-2 rounded-lg transition flex items-center gap-2 text-slate-400 hover:text-slate-200">
+            <i data-lucide="shield-check" class="w-4 h-4"></i>
+            <span>Log QR</span>
+          </button>
+          <button id="tabBtnAttendance" class="tab-btn px-3.5 py-2 rounded-lg transition flex items-center gap-2 text-slate-400 hover:text-slate-200">
+            <i data-lucide="clipboard-list" class="w-4 h-4"></i>
+            <span>Daftar Hadir</span>
+          </button>
+        </nav>
+
+        <!-- Right Controls (Clock & Logout) -->
+        <div class="flex items-center space-x-3">
+          <div class="hidden lg:block text-right">
+            <div id="liveClock" class="font-mono text-sm font-bold text-slate-200">--:--:--</div>
+            <div id="liveDate" class="text-[11px] text-slate-400">--</div>
+          </div>
+          <button id="btnLogoutAdmin" title="Kunci & Keluar Admin"
+            class="px-3 py-1.5 bg-red-500/15 hover:bg-red-500/25 border border-red-500/30 text-red-300 text-xs font-semibold rounded-xl transition flex items-center gap-1.5">
+            <i data-lucide="log-out" class="w-3.5 h-3.5"></i>
+            <span>Keluar</span>
+          </button>
+        </div>
+
+      </div>
+    </header>
+
+    <!-- Toast Notification -->
+    <div id="toastNotification" class="fixed top-20 right-4 z-50 transform translate-x-full transition-transform duration-300 pointer-events-none max-w-sm">
+      <div class="bg-slate-900/95 border border-emerald-500/50 rounded-2xl p-4 shadow-2xl backdrop-blur-xl flex items-start gap-3">
+        <div class="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0">
+          <i data-lucide="user-check" class="w-5 h-5"></i>
+        </div>
+        <div>
+          <span class="text-xs font-bold text-emerald-400">Presensi Diterima!</span>
+          <p id="toastText" class="text-sm font-semibold text-white mt-0.5">Nama Peserta</p>
+          <p id="toastDetail" class="text-[11px] text-slate-400 mt-0.5">QR baru otomatis aktif.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- MAIN VIEWS -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex-1 w-full">
+
+      <!-- TAB 1: LAYAR QR -->
+      <section id="viewProjector" class="space-y-6">
+        <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-4">
+          <div class="flex items-center gap-3">
+            <div class="p-2 rounded-xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+              <i data-lucide="globe" class="w-5 h-5"></i>
             </div>
-
-            <!-- Active Token Information -->
-            <div class="space-y-1.5">
-              <div class="flex items-center justify-center gap-2 text-xs text-slate-400">
-                <span>Kode Token Unik:</span>
-                <span id="activeTokenText" class="font-mono text-indigo-400 font-bold bg-slate-950 px-2 py-0.5 rounded border border-slate-800">
-                  QR-MEMUAT...
-                </span>
-              </div>
-              <p class="text-xs text-slate-500 font-medium">
-                Hangus otomatis seketika setelah 1 kali scan presensi berhasil.
+            <div>
+              <h2 class="text-sm font-bold text-white">Layar Presensi QR</h2>
+              <p class="text-xs text-slate-400">
+                Tampilkan layar ini ke peserta. Setiap QR hangus setelah 1x scan dan langsung berganti baru.
               </p>
             </div>
-
-            <!-- Access Link for Attendees -->
-            <div class="mt-5 pt-4 border-t border-slate-800/80 text-left space-y-2">
-              <span class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">
-                Link Presensi Peserta (Smartphone / Browser):
-              </span>
-              <div class="flex items-center justify-between bg-slate-950 p-2.5 rounded-xl border border-slate-800 text-xs">
-                <span id="mobileAccessUrl" class="font-mono text-emerald-400 font-semibold truncate select-all">memuat link...</span>
-                <button id="btnCopyUrl" title="Salin URL" class="text-slate-400 hover:text-white p-1 rounded hover:bg-slate-800 transition shrink-0 ml-2">
-                  <i data-lucide="copy" class="w-4 h-4"></i>
-                </button>
-              </div>
-            </div>
-
           </div>
 
+          <div class="flex items-center gap-2">
+            <button id="btnRefreshQr" class="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-medium transition flex items-center gap-2">
+              <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+              <span>Ganti QR</span>
+            </button>
+            <button id="btnFullscreen" class="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-lg shadow-indigo-600/20 transition flex items-center gap-2">
+              <i data-lucide="maximize" class="w-4 h-4"></i>
+              <span>Fullscreen</span>
+            </button>
+          </div>
         </div>
 
-        <!-- Right / Instructions & Live Activity (lg: 5 cols) -->
-        <div class="lg:col-span-5 space-y-4">
-          
-          <!-- How it Works Steps -->
-          <div class="bg-slate-900/80 border border-slate-800 rounded-2xl p-5 space-y-4">
-            <h3 class="font-bold text-sm text-white flex items-center gap-2">
-              <i data-lucide="smartphone" class="w-4 h-4 text-indigo-400"></i>
-              <span>Cara Melakukan Presensi</span>
-            </h3>
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
+          <!-- Left: QR Code Card -->
+          <div class="lg:col-span-7 flex flex-col items-center justify-center">
+            <div id="qrCardBox" class="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 text-center max-w-md w-full relative qr-card-glow transition-all duration-300">
+              <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs font-semibold mb-4">
+                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                <span>QR AKTIF &bull; MENUNGGU SCAN</span>
+              </div>
 
-            <div class="space-y-3 text-xs text-slate-300">
-              <div class="flex items-start gap-3">
-                <div class="w-6 h-6 rounded-full bg-indigo-500/20 text-indigo-400 font-bold flex items-center justify-center shrink-0 text-xs">1</div>
-                <div>
-                  <strong class="text-white">Scan QR Code</strong>
-                  <p class="text-slate-400 text-[11px] mt-0.5">Bisa pakai kuota seluler (Telkomsel/XL/Indosat) atau Wi-Fi apa saja.</p>
+              <div class="bg-white p-4 rounded-2xl shadow-2xl inline-block border-4 border-slate-800 mb-4 relative min-w-[280px] min-h-[280px]">
+                <img id="qrImage" src="" alt="QR Presensi" class="w-64 h-64 sm:w-72 sm:h-72 object-contain mx-auto block select-none">
+                <div id="qrCanvasContainer" class="hidden w-64 h-64 sm:w-72 sm:h-72 flex items-center justify-center mx-auto"></div>
+                <div id="qrOverlayLoading" class="absolute inset-0 bg-white/95 backdrop-blur-sm flex flex-col items-center justify-center rounded-xl transition-opacity">
+                  <div class="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+                  <span class="text-xs font-bold text-slate-800 mt-2">Memuat QR Code...</span>
                 </div>
               </div>
 
-              <div class="flex items-start gap-3">
-                <div class="w-6 h-6 rounded-full bg-indigo-500/20 text-indigo-400 font-bold flex items-center justify-center shrink-0 text-xs">2</div>
-                <div>
-                  <strong class="text-white">Isi Nama Lengkap</strong>
-                  <p class="text-slate-400 text-[11px] mt-0.5">Hari & tanggal otomatis. 1 perangkat hanya bisa absen 1 kali.</p>
+              <div class="space-y-1.5">
+                <div class="flex items-center justify-center gap-2 text-xs text-slate-400">
+                  <span>Token:</span>
+                  <span id="activeTokenText" class="font-mono text-indigo-400 font-bold bg-slate-950 px-2 py-0.5 rounded border border-slate-800">
+                    MEMUAT...
+                  </span>
                 </div>
+                <p class="text-xs text-slate-500">
+                  Hangus seketika setelah 1 kali scan berhasil.
+                </p>
               </div>
 
-              <div class="flex items-start gap-3">
-                <div class="w-6 h-6 rounded-full bg-indigo-500/20 text-indigo-400 font-bold flex items-center justify-center shrink-0 text-xs">3</div>
-                <div>
-                  <strong class="text-white">Konek ke Google Calendar</strong>
-                  <p class="text-slate-400 text-[11px] mt-0.5">Klik 1-klik untuk simpan jadwal kehadiran ke Google Calendar.</p>
+              <div class="mt-5 pt-4 border-t border-slate-800 text-left space-y-2">
+                <span class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">
+                  Link Akses Peserta:
+                </span>
+                <div class="flex items-center justify-between bg-slate-950 p-2.5 rounded-xl border border-slate-800 text-xs">
+                  <span id="mobileAccessUrl" class="font-mono text-emerald-400 font-semibold truncate select-all">memuat link...</span>
+                  <button id="btnCopyUrl" title="Salin URL" class="text-slate-400 hover:text-white p-1 rounded hover:bg-slate-800 transition shrink-0 ml-2">
+                    <i data-lucide="copy" class="w-4 h-4"></i>
+                  </button>
                 </div>
               </div>
             </div>
           </div>
 
-          <!-- Real-Time Activity Feed Card -->
-          <div class="bg-slate-900/80 border border-slate-800 rounded-2xl p-5 space-y-3">
-            <div class="flex items-center justify-between">
+          <!-- Right: Instructions & Feed -->
+          <div class="lg:col-span-5 space-y-4">
+            <div class="bg-slate-900/80 border border-slate-800 rounded-2xl p-5 space-y-4">
               <h3 class="font-bold text-sm text-white flex items-center gap-2">
-                <i data-lucide="activity" class="w-4 h-4 text-emerald-400"></i>
-                <span>Aktivitas Kehadiran Terkini</span>
+                <i data-lucide="smartphone" class="w-4 h-4 text-indigo-400"></i>
+                <span>Petunjuk Peserta</span>
               </h3>
-              <span id="liveFeedCount" class="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 font-mono">0 hadir</span>
+              <div class="space-y-3 text-xs text-slate-300">
+                <div class="flex items-start gap-3">
+                  <div class="w-6 h-6 rounded-full bg-indigo-500/20 text-indigo-400 font-bold flex items-center justify-center shrink-0 text-xs">1</div>
+                  <div>
+                    <strong class="text-white">Buka Kamera / Menu Absen</strong>
+                    <p class="text-slate-400 text-[11px] mt-0.5">Scan QR code yang tampil di layar proyektor.</p>
+                  </div>
+                </div>
+                <div class="flex items-start gap-3">
+                  <div class="w-6 h-6 rounded-full bg-indigo-500/20 text-indigo-400 font-bold flex items-center justify-center shrink-0 text-xs">2</div>
+                  <div>
+                    <strong class="text-white">Isi Nama</strong>
+                    <p class="text-slate-400 text-[11px] mt-0.5">Tanggal dan hari terkunci otomatis ke hari ini.</p>
+                  </div>
+                </div>
+                <div class="flex items-start gap-3">
+                  <div class="w-6 h-6 rounded-full bg-indigo-500/20 text-indigo-400 font-bold flex items-center justify-center shrink-0 text-xs">3</div>
+                  <div>
+                    <strong class="text-white">Simpan ke Google Calendar</strong>
+                    <p class="text-slate-400 text-[11px] mt-0.5">Simpan bukti jadwal presensi dengan 1 klik.</p>
+                  </div>
+                </div>
+              </div>
             </div>
 
-            <div id="liveActivityList" class="space-y-2 max-h-64 overflow-y-auto pr-1">
-              <div class="text-center py-6 text-slate-500 text-xs">
-                Belum ada presensi yang masuk. Menunggu scan pertama...
+            <div class="bg-slate-900/80 border border-slate-800 rounded-2xl p-5 space-y-3">
+              <div class="flex items-center justify-between">
+                <h3 class="font-bold text-sm text-white flex items-center gap-2">
+                  <i data-lucide="activity" class="w-4 h-4 text-emerald-400"></i>
+                  <span>Kehadiran Terkini</span>
+                </h3>
+                <span id="liveFeedCount" class="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 font-mono">0 hadir</span>
+              </div>
+              <div id="liveActivityList" class="space-y-2 max-h-64 overflow-y-auto pr-1">
+                <div class="text-center py-6 text-slate-500 text-xs">
+                  Belum ada presensi yang masuk.
+                </div>
               </div>
             </div>
           </div>
+        </div>
+      </section>
 
+      <!-- TAB 2: AUDIT LOG -->
+      <section id="viewAudit" class="hidden space-y-6">
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div class="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
+            <span class="text-xs text-slate-400 font-medium">Total QR</span>
+            <div id="auditMetricTotal" class="text-2xl font-extrabold text-white mt-1">0</div>
+          </div>
+          <div class="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
+            <span class="text-xs text-slate-400 font-medium">QR Aktif</span>
+            <div id="auditMetricActive" class="text-2xl font-extrabold text-emerald-400 mt-1">0</div>
+          </div>
+          <div class="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
+            <span class="text-xs text-slate-400 font-medium">QR Terpakai (1x)</span>
+            <div id="auditMetricUsed" class="text-2xl font-extrabold text-indigo-400 mt-1">0</div>
+          </div>
+          <div class="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
+            <span class="text-xs text-slate-400 font-medium">QR Kedaluwarsa</span>
+            <div id="auditMetricExpired" class="text-2xl font-extrabold text-slate-400 mt-1">0</div>
+          </div>
         </div>
 
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
+          <div class="p-4 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 class="font-bold text-sm text-white">Log Riwayat Token QR</h3>
+              <p class="text-xs text-slate-400">Daftar token QR beserta status pemakaian.</p>
+            </div>
+            <button id="btnRefreshAudit" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium rounded-xl border border-slate-700 transition flex items-center gap-1.5">
+              <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+              <span>Segarkan</span>
+            </button>
+          </div>
+
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs text-slate-300">
+              <thead class="bg-slate-950/80 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-800">
+                <tr>
+                  <th class="py-3 px-4">Status</th>
+                  <th class="py-3 px-4">Token QR</th>
+                  <th class="py-3 px-4">Pengguna</th>
+                  <th class="py-3 px-4">Device ID</th>
+                  <th class="py-3 px-4">Dibuat</th>
+                  <th class="py-3 px-4">Terpakai</th>
+                </tr>
+              </thead>
+              <tbody id="auditTableBody" class="divide-y divide-slate-800 font-medium">
+                <tr><td colspan="6" class="py-8 text-center text-slate-500">Memuat log...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 3: DAFTAR HADIR -->
+      <section id="viewAttendance" class="hidden space-y-6">
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div class="bg-slate-900 border border-slate-800 p-4 rounded-2xl flex items-center justify-between">
+            <div>
+              <span class="text-xs text-slate-400 font-medium">Presensi Hari Ini</span>
+              <div id="metricToday" class="text-2xl font-extrabold text-emerald-400 mt-1">0</div>
+            </div>
+            <div class="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center">
+              <i data-lucide="calendar" class="w-5 h-5"></i>
+            </div>
+          </div>
+
+          <div class="bg-slate-900 border border-slate-800 p-4 rounded-2xl flex items-center justify-between">
+            <div>
+              <span class="text-xs text-slate-400 font-medium">Total Presensi</span>
+              <div id="metricTotalRecords" class="text-2xl font-extrabold text-white mt-1">0</div>
+            </div>
+            <div class="w-10 h-10 rounded-xl bg-indigo-500/10 text-indigo-400 flex items-center justify-center">
+              <i data-lucide="users" class="w-5 h-5"></i>
+            </div>
+          </div>
+
+          <div class="bg-slate-900 border border-slate-800 p-4 rounded-2xl flex items-center justify-between">
+            <div>
+              <span class="text-xs text-slate-400 font-medium">Perangkat Unik</span>
+              <div id="metricUniqueDevices" class="text-2xl font-extrabold text-purple-400 mt-1">0</div>
+            </div>
+            <div class="w-10 h-10 rounded-xl bg-purple-500/10 text-purple-400 flex items-center justify-center">
+              <i data-lucide="smartphone" class="w-5 h-5"></i>
+            </div>
+          </div>
+        </div>
+
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-3">
+          <div class="flex flex-wrap items-center gap-2.5 flex-1 min-w-[280px]">
+            <div class="relative flex-1 min-w-[180px]">
+              <span class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-400">
+                <i data-lucide="search" class="w-4 h-4"></i>
+              </span>
+              <input type="text" id="filterSearch" placeholder="Cari nama atau perangkat..."
+                class="w-full pl-9 pr-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500">
+            </div>
+
+            <div class="relative">
+              <input type="date" id="filterDate"
+                class="px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-indigo-500">
+            </div>
+
+            <button id="btnResetFilter" title="Hapus Filter" class="p-2 bg-slate-800 hover:bg-slate-700 text-slate-400 rounded-xl transition">
+              <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+            </button>
+          </div>
+
+          <div class="flex items-center gap-2">
+            <button id="btnExportCsv" class="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-xl shadow-lg shadow-emerald-600/20 transition flex items-center gap-1.5">
+              <i data-lucide="download" class="w-4 h-4"></i>
+              <span>Export CSV</span>
+            </button>
+
+            <button id="btnResetData" class="px-3 py-2 bg-red-600/20 hover:bg-red-600/30 text-red-300 border border-red-500/30 text-xs font-semibold rounded-xl transition flex items-center gap-1.5">
+              <i data-lucide="trash-2" class="w-4 h-4"></i>
+              <span>Reset Data</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs text-slate-300">
+              <thead class="bg-slate-950/80 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-800">
+                <tr>
+                  <th class="py-3 px-4 w-12 text-center">#</th>
+                  <th class="py-3 px-4">Nama Lengkap</th>
+                  <th class="py-3 px-4">Hari & Tanggal</th>
+                  <th class="py-3 px-4">Jam Hadir</th>
+                  <th class="py-3 px-4">Token QR</th>
+                  <th class="py-3 px-4">Perangkat</th>
+                </tr>
+              </thead>
+              <tbody id="attendanceTableBody" class="divide-y divide-slate-800 font-medium">
+                <tr><td colspan="6" class="py-8 text-center text-slate-500">Memuat data...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="border-t border-slate-800/80 bg-slate-950 py-3.5 text-center text-xs text-slate-500">
+      <div class="max-w-7xl mx-auto px-4 flex flex-wrap items-center justify-between gap-2">
+        <span>Presensi QR &bull; 1x Scan per Perangkat</span>
+        <span class="text-slate-400">Online Cloud Sync</span>
       </div>
+    </footer>
 
-    </section>
+  </div>
 
-
-    <!-- ======================================================== -->
-    <!-- TAB 2: AUDIT QR ANTI-DOUBLE                              -->
-    <!-- ======================================================== -->
-    <section id="viewAudit" class="hidden space-y-6">
-      
-      <!-- Metrics Overview -->
-      <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <div class="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
-          <span class="text-xs text-slate-400 font-medium">Total QR Dibuat</span>
-          <div id="auditMetricTotal" class="text-2xl font-extrabold text-white mt-1">0</div>
-        </div>
-        <div class="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
-          <span class="text-xs text-slate-400 font-medium">QR Sedang Aktif</span>
-          <div id="auditMetricActive" class="text-2xl font-extrabold text-emerald-400 mt-1">0</div>
-        </div>
-        <div class="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
-          <span class="text-xs text-slate-400 font-medium">QR Berhasil Dipakai (USED)</span>
-          <div id="auditMetricUsed" class="text-2xl font-extrabold text-indigo-400 mt-1">0</div>
-        </div>
-        <div class="bg-slate-900 border border-slate-800 p-4 rounded-2xl">
-          <span class="text-xs text-slate-400 font-medium">QR Kedaluwarsa (EXPIRED)</span>
-          <div id="auditMetricExpired" class="text-2xl font-extrabold text-slate-400 mt-1">0</div>
-        </div>
-      </div>
-
-      <!-- Audit Table Card -->
-      <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
-        <div class="p-4 border-b border-slate-800 flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h3 class="font-bold text-sm text-white">Log Pelacakan Status QR Token (Audit Trail)</h3>
-            <p class="text-xs text-slate-400">Verifikasi anti-double scan: setiap token memiliki riwayat status yang transparan.</p>
-          </div>
-          <button id="btnRefreshAudit" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium rounded-xl border border-slate-700 transition flex items-center gap-1.5">
-            <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
-            <span>Segarkan Log</span>
-          </button>
-        </div>
-
-        <div class="overflow-x-auto">
-          <table class="w-full text-left text-xs text-slate-300">
-            <thead class="bg-slate-950/80 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-800">
-              <tr>
-                <th class="py-3 px-4">Status</th>
-                <th class="py-3 px-4">Token QR</th>
-                <th class="py-3 px-4">Digunakan Oleh</th>
-                <th class="py-3 px-4">Perangkat (Device ID)</th>
-                <th class="py-3 px-4">Waktu Dibuat</th>
-                <th class="py-3 px-4">Waktu Terpakai</th>
-              </tr>
-            </thead>
-            <tbody id="auditTableBody" class="divide-y divide-slate-800/60 font-medium">
-              <tr>
-                <td colspan="6" class="py-8 text-center text-slate-500">Memuat log audit...</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-    </section>
-
-
-    <!-- ======================================================== -->
-    <!-- TAB 3: DATA REKAPAN PRESENSI                             -->
-    <!-- ======================================================== -->
-    <section id="viewAttendance" class="hidden space-y-6">
-      
-      <!-- Metrics Overview -->
-      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div class="bg-slate-900 border border-slate-800 p-4 rounded-2xl flex items-center justify-between">
-          <div>
-            <span class="text-xs text-slate-400 font-medium">Presensi Hari Ini</span>
-            <div id="metricToday" class="text-2xl font-extrabold text-emerald-400 mt-1">0</div>
-          </div>
-          <div class="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center">
-            <i data-lucide="calendar" class="w-5 h-5"></i>
-          </div>
-        </div>
-
-        <div class="bg-slate-900 border border-slate-800 p-4 rounded-2xl flex items-center justify-between">
-          <div>
-            <span class="text-xs text-slate-400 font-medium">Total Seluruh Presensi</span>
-            <div id="metricTotalRecords" class="text-2xl font-extrabold text-white mt-1">0</div>
-          </div>
-          <div class="w-10 h-10 rounded-xl bg-indigo-500/10 text-indigo-400 flex items-center justify-center">
-            <i data-lucide="users" class="w-5 h-5"></i>
-          </div>
-        </div>
-
-        <div class="bg-slate-900 border border-slate-800 p-4 rounded-2xl flex items-center justify-between">
-          <div>
-            <span class="text-xs text-slate-400 font-medium">Perangkat Fisik Unik</span>
-            <div id="metricUniqueDevices" class="text-2xl font-extrabold text-purple-400 mt-1">0</div>
-          </div>
-          <div class="w-10 h-10 rounded-xl bg-purple-500/10 text-purple-400 flex items-center justify-center">
-            <i data-lucide="smartphone" class="w-5 h-5"></i>
-          </div>
-        </div>
-      </div>
-
-      <!-- Action & Filter Bar -->
-      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-3">
-        
-        <!-- Search & Date Filter -->
-        <div class="flex flex-wrap items-center gap-2.5 flex-1 min-w-[280px]">
-          <div class="relative flex-1 min-w-[180px]">
-            <span class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-400">
-              <i data-lucide="search" class="w-4 h-4"></i>
-            </span>
-            <input type="text" id="filterSearch" placeholder="Cari nama atau perangkat..."
-              class="w-full pl-9 pr-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500">
-          </div>
-
-          <div class="relative">
-            <input type="date" id="filterDate"
-              class="px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-indigo-500">
-          </div>
-
-          <button id="btnResetFilter" title="Hapus Filter" class="p-2 bg-slate-800 hover:bg-slate-700 text-slate-400 rounded-xl transition">
-            <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
-          </button>
-        </div>
-
-        <!-- Export & Reset Buttons -->
-        <div class="flex items-center gap-2">
-          <button id="btnExportCsv" class="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-xl shadow-lg shadow-emerald-600/20 transition flex items-center gap-1.5">
-            <i data-lucide="download" class="w-4 h-4"></i>
-            <span>Export CSV / Excel</span>
-          </button>
-
-          <button id="btnResetData" class="px-3 py-2 bg-red-600/20 hover:bg-red-600/30 text-red-300 border border-red-500/30 text-xs font-semibold rounded-xl transition flex items-center gap-1.5">
-            <i data-lucide="trash-2" class="w-4 h-4"></i>
-            <span>Reset Data</span>
-          </button>
-        </div>
-
-      </div>
-
-      <!-- Attendance Table -->
-      <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
-        <div class="overflow-x-auto">
-          <table class="w-full text-left text-xs text-slate-300">
-            <thead class="bg-slate-950/80 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-800">
-              <tr>
-                <th class="py-3 px-4 w-12 text-center">#</th>
-                <th class="py-3 px-4">Nama Lengkap</th>
-                <th class="py-3 px-4">Hari & Tanggal</th>
-                <th class="py-3 px-4">Jam Hadir</th>
-                <th class="py-3 px-4">Token QR Terpakai</th>
-                <th class="py-3 px-4">Perangkat & Info Sistem</th>
-              </tr>
-            </thead>
-            <tbody id="attendanceTableBody" class="divide-y divide-slate-800/60 font-medium">
-              <tr>
-                <td colspan="6" class="py-8 text-center text-slate-500">Memuat data presensi...</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-    </section>
-
-  </main>
-
-  <!-- Footer -->
-  <footer class="border-t border-slate-800/80 bg-slate-950 py-3.5 text-center text-xs text-slate-500">
-    <div class="max-w-7xl mx-auto px-4 flex flex-wrap items-center justify-between gap-2">
-      <span>Smart QR Attendance Tool &bull; Realtime Single-Use Token Architecture</span>
-      <span class="text-slate-400">Online Hosting: GitHub Pages &bull; Cloud MQTT WSS Sync</span>
-    </div>
-  </footer>
-
-  <!-- Fingerprint & Admin Controller Script -->
+  <!-- Fingerprint & Admin Controller Scripts -->
   <script src="fingerprint.js"></script>
   <script src="admin.js"></script>
   <script>
