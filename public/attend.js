@@ -218,10 +218,12 @@ document.addEventListener('DOMContentLoaded', async () => {
       <span>Memverifikasi Presensi...</span>
     `;
 
+    const attendType = (urlParams.get('type') || 'MASUK').toUpperCase();
     const reqId = 'req_' + Math.random().toString(36).substring(2, 10);
     const payload = {
       token,
       name,
+      type: attendType,
       date,
       day,
       time,
@@ -311,12 +313,37 @@ document.addEventListener('DOMContentLoaded', async () => {
   function attemptLocalFallback(payload, originalBtnText) {
     try {
       const attendances = JSON.parse(localStorage.getItem('sqr_attendances')) || [];
-      const existing = attendances.find(a => a.device_id === deviceId && a.date === payload.date);
-      if (existing) {
-        btnSubmit.disabled = false;
-        btnSubmit.innerHTML = originalBtnText;
-        alert(`Presensi Ditolak:\n\nPerangkat ini sudah tercatat melakukan absensi hari ini atas nama "${existing.name}". 1 perangkat hanya bisa absen 1 kali per hari!`);
-        return;
+      const currentType = (payload.type || 'MASUK').toUpperCase();
+
+      if (currentType === 'MASUK') {
+        const existing = attendances.find(a => a.device_id === deviceId && a.date === payload.date && (a.type === 'MASUK' || !a.type));
+        if (existing) {
+          btnSubmit.disabled = false;
+          btnSubmit.innerHTML = originalBtnText;
+          alert(`Presensi Masuk Ditolak:\n\nPerangkat ini sudah tercatat melakukan Absensi Masuk hari ini atas nama "${existing.name}". 1 perangkat hanya bisa absen masuk 1 kali per hari!`);
+          return;
+        }
+      } else if (currentType === 'KELUAR') {
+        const masukRecord = attendances.find(a => a.device_id === deviceId && a.date === payload.date && (a.type === 'MASUK' || !a.type));
+        if (!masukRecord) {
+          btnSubmit.disabled = false;
+          btnSubmit.innerHTML = originalBtnText;
+          alert(`Presensi Keluar Ditolak:\n\nPerangkat Anda belum tercatat melakukan Absensi Masuk hari ini. Silakan lakukan Absensi Masuk terlebih dahulu!`);
+          return;
+        }
+        if (masukRecord.name.trim().toLowerCase() !== payload.name.trim().toLowerCase()) {
+          btnSubmit.disabled = false;
+          btnSubmit.innerHTML = originalBtnText;
+          alert(`Presensi Keluar Ditolak:\n\nNama ("${payload.name}") tidak cocok dengan data nama saat Absensi Masuk ("${masukRecord.name}"). Harap gunakan nama yang sama persis!`);
+          return;
+        }
+        const existingKeluar = attendances.find(a => a.device_id === deviceId && a.date === payload.date && a.type === 'KELUAR');
+        if (existingKeluar) {
+          btnSubmit.disabled = false;
+          btnSubmit.innerHTML = originalBtnText;
+          alert(`Presensi Keluar Ditolak:\n\nPerangkat ini sudah tercatat melakukan Absensi Keluar hari ini pada pukul ${existingKeluar.time} WIB.`);
+          return;
+        }
       }
 
       const tokens = JSON.parse(localStorage.getItem('sqr_qr_tokens')) || [];

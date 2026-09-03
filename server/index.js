@@ -181,10 +181,11 @@ app.get('/api/qr/check/:token', (req, res) => {
   });
 });
 
-// 5. Submit attendance (Single-use QR validation + Device lock)
+// 5. Submit attendance (Single-use QR validation + Device lock + Masuk/Keluar)
 app.post('/api/attendance/submit', async (req, res) => {
   try {
-    const { token, name, date, day, time, deviceId, deviceInfo } = req.body;
+    const { token, name, date, day, time, deviceId, deviceInfo, type = 'MASUK' } = req.body;
+    const attendType = String(type).toUpperCase() === 'KELUAR' ? 'KELUAR' : 'MASUK';
 
     if (!token || !name || !deviceId) {
       return res.status(400).json({
@@ -234,17 +235,46 @@ app.post('/api/attendance/submit', async (req, res) => {
       });
     }
 
-    // 3. Check Device Lock (1 attendance per device per day)
     const targetDate = todayRegional;
-    const existingDeviceRecord = AttendanceModel.hasDeviceAttended(deviceId, targetDate);
-    if (existingDeviceRecord) {
-      return res.status(403).json({
-        success: false,
-        error: `Perangkat ini sudah tercatat melakukan absensi hari ini atas nama "${existingDeviceRecord.name}" pada pukul ${existingDeviceRecord.time}. Setiap perangkat fisik hanya diperbolehkan absen 1 kali per hari!`
-      });
+
+    // 3. Validation for MASUK vs KELUAR
+    if (attendType === 'MASUK') {
+      const existingMasuk = AttendanceModel.hasDeviceAttendedMasuk(deviceId, targetDate);
+      if (existingMasuk) {
+        return res.status(403).json({
+          success: false,
+          error: `Perangkat ini sudah tercatat melakukan Absensi Masuk hari ini atas nama "${existingMasuk.name}" pada pukul ${existingMasuk.time}. Setiap perangkat fisik hanya diperbolehkan absen masuk 1 kali per hari!`
+        });
+      }
+    } else if (attendType === 'KELUAR') {
+      // Must have checked in today
+      const masukRecord = AttendanceModel.getMasukRecord(deviceId, targetDate);
+      if (!masukRecord) {
+        return res.status(403).json({
+          success: false,
+          error: 'Presensi Keluar Ditolak: Perangkat Anda belum tercatat melakukan Absensi Masuk hari ini. Silakan lakukan Absensi Masuk terlebih dahulu!'
+        });
+      }
+
+      // Name must match check-in name
+      if (masukRecord.name.trim().toLowerCase() !== trimmedName.toLowerCase()) {
+        return res.status(400).json({
+          success: false,
+          error: `Presensi Keluar Ditolak: Nama ("${trimmedName}") tidak cocok dengan data nama saat Absensi Masuk ("${masukRecord.name}"). Harap gunakan nama yang sama persis!`
+        });
+      }
+
+      // Must not double check-out
+      const existingKeluar = AttendanceModel.hasDeviceAttendedKeluar(deviceId, targetDate);
+      if (existingKeluar) {
+        return res.status(403).json({
+          success: false,
+          error: `Perangkat ini sudah tercatat melakukan Absensi Keluar hari ini pada pukul ${existingKeluar.time}. Anda sudah menyelesaikan absensi hari ini!`
+        });
+      }
     }
 
-    // 3. Mark QR as USED atomically
+    // 4. Mark QR as USED atomically
     const markSuccess = QRTokenModel.markUsed(token, trimmedName, deviceId);
     if (!markSuccess) {
       return res.status(409).json({
@@ -253,18 +283,19 @@ app.post('/api/attendance/submit', async (req, res) => {
       });
     }
 
-    // 4. Record attendance
+    // 5. Record attendance
     const currentTime = time || new Date().toLocaleTimeString('id-ID', { hour12: false });
     const currentDay = day || new Intl.DateTimeFormat('id-ID', { weekday: 'long' }).format(new Date());
 
     const newAttendance = AttendanceModel.createAttendance({
       token,
       name: trimmedName,
+      type: attendType,
       date: targetDate,
       day: currentDay,
       time: currentTime,
       deviceId,
-      deviceInfo: deviceInfo || req.headers['user-agent'] || 'Unknown Device'
+      deviceInfo: deviceInfo || req.headers['user-agent'] || 'Perangkat Pengguna'
     });
 
     // 5. Automatically generate the NEXT fresh QR Code immediately!

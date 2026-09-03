@@ -1,12 +1,14 @@
 /**
  * Admin Dashboard & Gate Controller (admin.js)
  * Fitur:
- * 1. Gate Pop-up Awal (Pilihan Admin Login vs Isi Absensi)
- * 2. Kunci Layar Admin (Username: Admin1118, Password: AFIFweb18)
- * 3. In-Browser Camera Scanner untuk menu "Isi Absensi"
- * 4. Kunci Tanggal Regional (Hanya bisa absen hari ini)
- * 5. Single-Use Dynamic QR Rotation & Device-Lock (1x per device per day)
- * 6. Real-time Multi-Provider Cloud Sync (MQTT WSS) & Google Calendar Integration
+ * 1. Gate Pop-up Awal (Admin Login vs Absensi)
+ * 2. Pilihan Jenis Presensi (Absensi Masuk & Absensi Keluar)
+ * 3. Kunci Layar Admin (Username: Admin1118, Password: AFIFweb18)
+ * 4. In-Browser Camera Scanner dengan 1 Tombol Upload Foto QR di border kamera
+ * 5. Validasi Ketat Absensi Keluar: Wajib sudah absen masuk dengan nama & device yang sama
+ * 6. Kunci Tanggal Regional & Single-Use Dynamic QR Rotation
+ * 7. Tampilan Data Presensi Multi-Tab: Absensi Utama (Masuk + Keluar), Absensi Masuk, Absensi Keluar
+ * 8. Real-time Multi-Provider Cloud Sync (MQTT WSS) & Integrasi Google Calendar
  */
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -14,9 +16,15 @@ document.addEventListener('DOMContentLoaded', () => {
   const gateModal = document.getElementById('gateModal');
   const btnOpenAdminLogin = document.getElementById('btnOpenAdminLogin');
   const btnOpenScan = document.getElementById('btnOpenScan');
-  const btnOpenUpload = document.getElementById('btnOpenUpload');
   const inputQrFile = document.getElementById('inputQrFile');
 
+  // --- ABSENSI CHOICE ELEMENTS (MASUK / KELUAR) ---
+  const absensiChoiceModal = document.getElementById('absensiChoiceModal');
+  const btnChoiceMasuk = document.getElementById('btnChoiceMasuk');
+  const btnChoiceKeluar = document.getElementById('btnChoiceKeluar');
+  const btnCancelChoice = document.getElementById('btnCancelChoice');
+
+  // --- ADMIN LOGIN ELEMENTS ---
   const adminLoginModal = document.getElementById('adminLoginModal');
   const formAdminLogin = document.getElementById('formAdminLogin');
   const inputUsername = document.getElementById('inputUsername');
@@ -32,9 +40,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // --- SCANNER MODAL ELEMENTS ---
   const cameraScanModal = document.getElementById('cameraScanModal');
+  const cameraModalTitle = document.getElementById('cameraModalTitle');
   const btnCloseCamera = document.getElementById('btnCloseCamera');
   const btnUploadFromScanner = document.getElementById('btnUploadFromScanner');
-  const btnUploadFromScannerAlt = document.getElementById('btnUploadFromScannerAlt');
   const cameraViewContainer = document.getElementById('cameraViewContainer');
   const scanStatusBadge = document.getElementById('scanStatusBadge');
   const scanStatusText = document.getElementById('scanStatusText');
@@ -43,8 +51,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // --- INLINE ATTENDANCE FORM ELEMENTS ---
   const attendInlineModal = document.getElementById('attendInlineModal');
+  const inlineTypeBadge = document.getElementById('inlineTypeBadge');
   const inlineTokenBadge = document.getElementById('inlineTokenBadge');
   const inlineFormWrapper = document.getElementById('inlineFormWrapper');
+  const inlineFormTitle = document.getElementById('inlineFormTitle');
+  const inlineFormSubtitle = document.getElementById('inlineFormSubtitle');
+  const inlineKeluarNotice = document.getElementById('inlineKeluarNotice');
   const inlineSuccessWrapper = document.getElementById('inlineSuccessWrapper');
   const inlineAttendForm = document.getElementById('inlineAttendForm');
   const inlineInputName = document.getElementById('inlineInputName');
@@ -97,10 +109,19 @@ document.addEventListener('DOMContentLoaded', () => {
   const auditTableBody = document.getElementById('auditTableBody');
   const btnRefreshAudit = document.getElementById('btnRefreshAudit');
 
-  const metricToday = document.getElementById('metricToday');
+  // Metric Cards for Attendance View
+  const metricMasukToday = document.getElementById('metricMasukToday');
+  const metricKeluarToday = document.getElementById('metricKeluarToday');
+  const metricLengkapToday = document.getElementById('metricLengkapToday');
   const metricTotalRecords = document.getElementById('metricTotalRecords');
-  const metricUniqueDevices = document.getElementById('metricUniqueDevices');
+
+  // Sub-tabs for Attendance View
+  const subTabUtama = document.getElementById('subTabUtama');
+  const subTabMasuk = document.getElementById('subTabMasuk');
+  const subTabKeluar = document.getElementById('subTabKeluar');
+  const attendanceTableHead = document.getElementById('attendanceTableHead');
   const attendanceTableBody = document.getElementById('attendanceTableBody');
+
   const filterSearch = document.getElementById('filterSearch');
   const filterDate = document.getElementById('filterDate');
   const btnResetFilter = document.getElementById('btnResetFilter');
@@ -114,7 +135,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const STORAGE_AUTH = 'sqr_admin_authenticated';
 
   let currentActiveToken = null;
-  let isServerMode = false;
+  let currentAttendanceType = 'MASUK'; // 'MASUK' | 'KELUAR'
+  let activeSubTab = 'UTAMA'; // 'UTAMA' | 'MASUK' | 'KELUAR'
   let mqttClient = null;
   let html5QrScanner = null;
   let activeScannedToken = null;
@@ -207,12 +229,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const isAuth = sessionStorage.getItem(STORAGE_AUTH) === 'true';
     if (isAuth) {
       gateModal.classList.add('hidden');
+      if (absensiChoiceModal) absensiChoiceModal.classList.add('hidden');
       adminLoginModal.classList.add('hidden');
       adminDashboardWrapper.classList.remove('hidden');
       initAdminDashboard();
     } else {
       adminDashboardWrapper.classList.add('hidden');
       gateModal.classList.remove('hidden');
+      if (absensiChoiceModal) absensiChoiceModal.classList.add('hidden');
       adminLoginModal.classList.add('hidden');
     }
   }
@@ -252,6 +276,7 @@ document.addEventListener('DOMContentLoaded', () => {
       sessionStorage.setItem(STORAGE_AUTH, 'true');
       adminLoginModal.classList.add('hidden');
       gateModal.classList.add('hidden');
+      if (absensiChoiceModal) absensiChoiceModal.classList.add('hidden');
       adminDashboardWrapper.classList.remove('hidden');
       initAdminDashboard();
       showToast('Login Berhasil', 'Selamat datang di Layar Admin.');
@@ -271,7 +296,43 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // --- 2. CAMERA SCANNER & PHOTO UPLOAD FOR "ISI ABSENSI" ---
+  // --- 2. ALUR PILIHAN ABSENSI (MASUK & KELUAR) ---
+  btnOpenScan.addEventListener('click', () => {
+    gateModal.classList.add('hidden');
+    absensiChoiceModal.classList.remove('hidden');
+    lucide.createIcons();
+  });
+
+  if (btnCancelChoice) {
+    btnCancelChoice.addEventListener('click', () => {
+      absensiChoiceModal.classList.add('hidden');
+      gateModal.classList.remove('hidden');
+    });
+  }
+
+  if (btnChoiceMasuk) {
+    btnChoiceMasuk.addEventListener('click', () => {
+      currentAttendanceType = 'MASUK';
+      absensiChoiceModal.classList.add('hidden');
+      if (cameraModalTitle) cameraModalTitle.textContent = 'Absensi Masuk - Scan QR';
+      cameraScanModal.classList.remove('hidden');
+      startInAppCameraScanner();
+      lucide.createIcons();
+    });
+  }
+
+  if (btnChoiceKeluar) {
+    btnChoiceKeluar.addEventListener('click', () => {
+      currentAttendanceType = 'KELUAR';
+      absensiChoiceModal.classList.add('hidden');
+      if (cameraModalTitle) cameraModalTitle.textContent = 'Absensi Keluar - Scan QR';
+      cameraScanModal.classList.remove('hidden');
+      startInAppCameraScanner();
+      lucide.createIcons();
+    });
+  }
+
+  // --- 3. CAMERA SCANNER & SINGLE PHOTO UPLOAD BUTTON ---
   let isStabilizing = false;
 
   function extractQrData(text) {
@@ -279,7 +340,6 @@ document.addEventListener('DOMContentLoaded', () => {
     let token = null;
     let session = null;
 
-    // 1. Cek apakah format URL
     if (text.startsWith('http://') || text.startsWith('https://')) {
       try {
         const urlObj = new URL(text);
@@ -288,7 +348,6 @@ document.addEventListener('DOMContentLoaded', () => {
       } catch (e) {}
     }
 
-    // 2. Jika belum ketemu, cari pola QR-[A-Z0-9]{4,10}
     if (!token) {
       const match = text.match(/(QR-[A-Z0-9]{4,10})/i);
       if (match) {
@@ -296,7 +355,6 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
 
-    // Hanya terima jika memiliki token QR yang valid
     if (!token || !token.startsWith('QR-')) {
       return null;
     }
@@ -304,29 +362,9 @@ document.addEventListener('DOMContentLoaded', () => {
     return { token: token.toUpperCase(), session: session || null };
   }
 
-  // Tombol Buka Scanner Kamera
-  btnOpenScan.addEventListener('click', () => {
-    gateModal.classList.add('hidden');
-    cameraScanModal.classList.remove('hidden');
-    startInAppCameraScanner();
-  });
-
-  // Tombol Buka File Foto dari Gate Modal
-  if (btnOpenUpload) {
-    btnOpenUpload.addEventListener('click', () => {
-      inputQrFile.click();
-    });
-  }
-
-  // Tombol Buka File Foto dari dalam Scanner Modal (Border Kamera)
+  // Tombol Buka File Foto dari Border Kamera (Satu-satunya Tombol Upload)
   if (btnUploadFromScanner) {
     btnUploadFromScanner.addEventListener('click', () => {
-      inputQrFile.click();
-    });
-  }
-
-  if (btnUploadFromScannerAlt) {
-    btnUploadFromScannerAlt.addEventListener('click', () => {
       inputQrFile.click();
     });
   }
@@ -353,11 +391,11 @@ document.addEventListener('DOMContentLoaded', () => {
           return;
         }
 
-        // QR Valid dari foto!
         playSuccessChime();
         stopInAppCameraScanner();
         cameraScanModal.classList.add('hidden');
         gateModal.classList.add('hidden');
+        if (absensiChoiceModal) absensiChoiceModal.classList.add('hidden');
 
         activeScannedToken = qrData.token;
         activeScannedSession = qrData.session;
@@ -375,7 +413,7 @@ document.addEventListener('DOMContentLoaded', () => {
   btnCloseCamera.addEventListener('click', () => {
     stopInAppCameraScanner();
     cameraScanModal.classList.add('hidden');
-    gateModal.classList.remove('hidden');
+    absensiChoiceModal.classList.remove('hidden');
   });
 
   function startInAppCameraScanner() {
@@ -403,13 +441,13 @@ document.addEventListener('DOMContentLoaded', () => {
       { facingMode: "environment" },
       config,
       onQrCodeSuccess,
-      () => {} // silent on frame without QR
+      () => {}
     ).catch(err => {
       console.error('Camera error:', err);
       alert('Gagal mengakses kamera!\n\nPastikan Anda mengizinkan izin akses kamera pada browser Anda.');
       stopInAppCameraScanner();
       cameraScanModal.classList.add('hidden');
-      gateModal.classList.remove('hidden');
+      absensiChoiceModal.classList.remove('hidden');
     });
   }
 
@@ -423,31 +461,25 @@ document.addEventListener('DOMContentLoaded', () => {
   async function onQrCodeSuccess(decodedText) {
     if (isStabilizing) return;
 
-    // Filter ketat: Pastikan benar-benar format QR Presensi kita (tidak langsung comot barcode lain)
     const qrData = extractQrData(decodedText);
     if (!qrData) {
-      // Abaikan barcode acak yang belum pas
       return;
     }
 
-    // Kunci stabilisasi: Berikan feedback visual & waktu jeda santai agar tidak kaget
     isStabilizing = true;
     playSuccessChime();
 
-    // Visual feedback
     cameraViewContainer.classList.add('border-emerald-500', 'ring-4', 'ring-emerald-500/30');
     stabilizedTokenText.textContent = qrData.token;
     scannerStabilizeOverlay.classList.remove('hidden');
     scanStatusText.textContent = '✅ QR Divalidasi: ' + qrData.token;
 
-    // Pause scanner kamera
     try {
       if (html5QrScanner && html5QrScanner.isScanning) {
         html5QrScanner.pause(true);
       }
     } catch (e) {}
 
-    // Delay 600ms agar user merasa tenang dan yakin QR terdeteksi penuh
     await new Promise(res => setTimeout(res, 650));
 
     stopInAppCameraScanner();
@@ -470,6 +502,23 @@ document.addEventListener('DOMContentLoaded', () => {
     inlineInputDate.value = todayStr;
     inlineInputDay.value = getIndonesianDayName(today);
 
+    // Setup Type Badge & Notices for MASUK vs KELUAR
+    if (inlineTypeBadge) {
+      if (currentAttendanceType === 'KELUAR') {
+        inlineTypeBadge.textContent = 'KELUAR';
+        inlineTypeBadge.className = 'text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-400 border border-rose-500/30 uppercase';
+        if (inlineFormTitle) inlineFormTitle.textContent = 'Presensi Keluar (Pulang)';
+        if (inlineFormSubtitle) inlineFormSubtitle.textContent = 'Masukkan nama yang sama persis saat Anda Absensi Masuk.';
+        if (inlineKeluarNotice) inlineKeluarNotice.classList.remove('hidden');
+      } else {
+        inlineTypeBadge.textContent = 'MASUK';
+        inlineTypeBadge.className = 'text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 uppercase';
+        if (inlineFormTitle) inlineFormTitle.textContent = 'Isi Identitas Kehadiran';
+        if (inlineFormSubtitle) inlineFormSubtitle.textContent = 'Lengkapi nama Anda untuk mencatat kehadiran masuk.';
+        if (inlineKeluarNotice) inlineKeluarNotice.classList.add('hidden');
+      }
+    }
+
     // Get Device info
     if (window.DeviceFingerprint) {
       const dev = window.DeviceFingerprint.getDeviceInfo();
@@ -483,7 +532,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   btnCancelInline.addEventListener('click', () => {
     attendInlineModal.classList.add('hidden');
-    gateModal.classList.remove('hidden');
+    absensiChoiceModal.classList.remove('hidden');
   });
 
   btnFinishInline.addEventListener('click', () => {
@@ -491,7 +540,7 @@ document.addEventListener('DOMContentLoaded', () => {
     gateModal.classList.remove('hidden');
   });
 
-  // Handle Form Presensi Submit (Dengan Dukungan Cloud MQTT Lintas Perangkat / Beda Wi-Fi)
+  // Handle Form Presensi Submit (Dengan Dukungan Cloud MQTT & Validasi Absensi Keluar)
   inlineAttendForm.addEventListener('submit', async (e) => {
     e.preventDefault();
 
@@ -525,6 +574,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const payload = {
       token: activeScannedToken,
       name,
+      type: currentAttendanceType || 'MASUK',
       date: todayStr,
       day: dayStr,
       time: timeStr,
@@ -597,12 +647,10 @@ document.addEventListener('DOMContentLoaded', () => {
           }
         });
 
-        // Timeout 7 detik jika admin belum merespon
         setTimeout(() => {
           if (!handled) {
             handled = true;
             try { userMqtt.end(); } catch(e) {}
-            // Fallback ke local engine
             const fallbackResult = processAttendanceSubmission(payload);
             btnSubmitInline.disabled = false;
             btnSubmitInline.innerHTML = origText;
@@ -620,7 +668,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
 
-    // 3. Fallback: Local Engine (Jika buka di satu browser / device yang sama)
+    // 3. Fallback: Local Engine (Satu browser / device yang sama)
     const result = processAttendanceSubmission(payload);
     btnSubmitInline.disabled = false;
     btnSubmitInline.innerHTML = origText;
@@ -639,13 +687,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     inlineSuccName.textContent = record.name;
     inlineSuccDate.textContent = `${record.day}, ${record.date}`;
-    inlineSuccTime.textContent = `${record.time} WIB`;
+    inlineSuccTime.textContent = `${record.time} WIB (${record.type || 'MASUK'})`;
 
     setupInlineGoogleCalendar(record);
     lucide.createIcons();
   }
 
-  function setupInlineGoogleCalendar({ name, date, day, time, token }) {
+  function setupInlineGoogleCalendar({ name, date, day, time, token, type }) {
+    const isKeluar = (type || currentAttendanceType) === 'KELUAR';
     const [year, month, dayNum] = date.split('-');
     const [hour, minute, second] = (time || '08:00:00').split(':');
 
@@ -660,8 +709,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const startFormatted = formatGCalDateTime(startDate);
     const endFormatted = formatGCalDateTime(endDate);
 
-    const title = `Presensi: ${name}`;
-    const description = `Bukti Kehadiran Resmi Smart QR Attendance.\n\nNama: ${name}\nHari: ${day}\nTanggal: ${date}\nJam Masuk: ${time} WIB\nKode Token: ${token}\nStatus: Hadir Terverifikasi`;
+    const title = `Presensi ${isKeluar ? 'Keluar (Pulang)' : 'Masuk'}: ${name}`;
+    const description = `Bukti Kehadiran Resmi Smart QR Attendance.\n\nJenis: Presensi ${isKeluar ? 'Keluar (Pulang)' : 'Masuk (Kehadiran)'}\nNama: ${name}\nHari: ${day}\nTanggal: ${date}\nJam: ${time} WIB\nKode Token: ${token}\nStatus: Hadir Terverifikasi`;
     const location = `Sistem Presensi Smart QR`;
 
     const gcalUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(title)}&dates=${startFormatted}/${endFormatted}&details=${encodeURIComponent(description)}&location=${encodeURIComponent(location)}`;
@@ -691,20 +740,21 @@ document.addEventListener('DOMContentLoaded', () => {
       const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
       const link = document.createElement('a');
       link.href = window.URL.createObjectURL(blob);
-      link.setAttribute('download', `Presensi-${name.replace(/\s+/g, '_')}-${date}.ics`);
+      link.setAttribute('download', `Presensi_${isKeluar ? 'Keluar' : 'Masuk'}-${name.replace(/\s+/g, '_')}-${date}.ics`);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
     };
   }
 
-  // --- 3. ADMIN DASHBOARD ENGINE ---
+  // --- 4. ADMIN DASHBOARD ENGINE ---
   let adminInitialized = false;
   function initAdminDashboard() {
     if (adminInitialized) return;
     adminInitialized = true;
 
     initTabs();
+    initSubTabs();
     initClock();
     initCloudMqtt();
     bootAdminQr();
@@ -736,6 +786,51 @@ document.addEventListener('DOMContentLoaded', () => {
         lucide.createIcons();
       });
     });
+  }
+
+  function initSubTabs() {
+    function updateSubTabButtons() {
+      [subTabUtama, subTabMasuk, subTabKeluar].forEach(btn => {
+        if (!btn) return;
+        btn.classList.remove('active', 'bg-indigo-600', 'bg-emerald-600', 'bg-rose-600', 'text-white', 'shadow-lg');
+        btn.classList.add('text-slate-400', 'bg-slate-900', 'border', 'border-slate-800');
+      });
+
+      if (activeSubTab === 'UTAMA' && subTabUtama) {
+        subTabUtama.classList.add('active', 'bg-indigo-600', 'text-white', 'shadow-lg');
+        subTabUtama.classList.remove('text-slate-400', 'bg-slate-900');
+      } else if (activeSubTab === 'MASUK' && subTabMasuk) {
+        subTabMasuk.classList.add('active', 'bg-emerald-600', 'text-white', 'shadow-lg');
+        subTabMasuk.classList.remove('text-slate-400', 'bg-slate-900');
+      } else if (activeSubTab === 'KELUAR' && subTabKeluar) {
+        subTabKeluar.classList.add('active', 'bg-rose-600', 'text-white', 'shadow-lg');
+        subTabKeluar.classList.remove('text-slate-400', 'bg-slate-900');
+      }
+    }
+
+    if (subTabUtama) {
+      subTabUtama.addEventListener('click', () => {
+        activeSubTab = 'UTAMA';
+        updateSubTabButtons();
+        loadAttendanceData();
+      });
+    }
+
+    if (subTabMasuk) {
+      subTabMasuk.addEventListener('click', () => {
+        activeSubTab = 'MASUK';
+        updateSubTabButtons();
+        loadAttendanceData();
+      });
+    }
+
+    if (subTabKeluar) {
+      subTabKeluar.addEventListener('click', () => {
+        activeSubTab = 'KELUAR';
+        updateSubTabButtons();
+        loadAttendanceData();
+      });
+    }
   }
 
   function initClock() {
@@ -840,7 +935,8 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // --- ATTENDANCE VERIFICATION & RECORD ENGINE ---
-  function processAttendanceSubmission({ token, name, date, day, time, deviceId, deviceInfo }) {
+  function processAttendanceSubmission({ token, name, date, day, time, deviceId, deviceInfo, type }) {
+    const attendType = (type || currentAttendanceType || 'MASUK').toUpperCase();
     const tokens = getStoredTokens();
     const targetToken = tokens.find(t => t.token === token);
 
@@ -872,16 +968,47 @@ document.addEventListener('DOMContentLoaded', () => {
       };
     }
 
-    // Check Device Lock (1 attendance per device per day)
     const attendances = getStoredAttendances();
     const targetDate = todayRegional;
-    const existingDeviceRecord = attendances.find(a => a.device_id === deviceId && a.date === targetDate);
 
-    if (existingDeviceRecord) {
-      return {
-        success: false,
-        error: `Perangkat ini sudah tercatat melakukan absensi hari ini atas nama "${existingDeviceRecord.name}" pada pukul ${existingDeviceRecord.time}. Setiap perangkat fisik hanya diperbolehkan absen 1 kali per hari!`
-      };
+    // 1. VALIDASI ABSENSI MASUK
+    if (attendType === 'MASUK') {
+      const existingMasuk = attendances.find(a => a.device_id === deviceId && a.date === targetDate && (a.type === 'MASUK' || !a.type));
+      if (existingMasuk) {
+        return {
+          success: false,
+          error: `Perangkat ini sudah tercatat melakukan Absensi Masuk hari ini atas nama "${existingMasuk.name}" pada pukul ${existingMasuk.time} WIB. 1 perangkat hanya bisa absen masuk 1 kali per hari!`
+        };
+      }
+    }
+
+    // 2. VALIDASI KHUSUS ABSENSI KELUAR
+    if (attendType === 'KELUAR') {
+      // a. Wajib sudah tercatat di Absensi Masuk hari ini
+      const masukRecord = attendances.find(a => a.device_id === deviceId && a.date === targetDate && (a.type === 'MASUK' || !a.type));
+      if (!masukRecord) {
+        return {
+          success: false,
+          error: `Presensi Keluar Ditolak:\n\nPerangkat Anda belum tercatat melakukan Absensi Masuk hari ini. Silakan lakukan Absensi Masuk terlebih dahulu!`
+        };
+      }
+
+      // b. Nama wajib sama dengan nama saat Absensi Masuk
+      if (masukRecord.name.trim().toLowerCase() !== name.trim().toLowerCase()) {
+        return {
+          success: false,
+          error: `Presensi Keluar Ditolak:\n\nNama ("${name}") tidak cocok dengan data nama saat Absensi Masuk ("${masukRecord.name}"). Harap gunakan nama yang sama persis!`
+        };
+      }
+
+      // c. Tidak boleh double keluar
+      const existingKeluar = attendances.find(a => a.device_id === deviceId && a.date === targetDate && a.type === 'KELUAR');
+      if (existingKeluar) {
+        return {
+          success: false,
+          error: `Perangkat ini sudah tercatat melakukan Absensi Keluar hari ini pada pukul ${existingKeluar.time} WIB. 1 perangkat hanya bisa absen keluar 1 kali!`
+        };
+      }
     }
 
     // Mark token as USED
@@ -890,6 +1017,7 @@ document.addEventListener('DOMContentLoaded', () => {
     targetToken.used_at = now;
     targetToken.used_by_name = name;
     targetToken.device_id = deviceId;
+    targetToken.type = attendType;
     saveTokens(tokens);
 
     // Save Attendance Record
@@ -897,6 +1025,7 @@ document.addEventListener('DOMContentLoaded', () => {
       id: Date.now(),
       token,
       name,
+      type: attendType,
       date: targetDate,
       day: day || getIndonesianDayName(localNow),
       time: time || localNow.toLocaleTimeString('id-ID', { hour12: false }),
@@ -913,7 +1042,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Trigger Success Audio & Visuals
     playSuccessChime();
     triggerScanFlash();
-    showToast('Presensi Berhasil!', `${name} telah diabsen.`);
+    showToast(`Presensi ${attendType === 'KELUAR' ? 'Keluar' : 'Masuk'} Berhasil!`, `${name} telah diabsen.`);
     addLiveActivity(record);
     loadAuditData();
     loadAttendanceData();
@@ -921,7 +1050,7 @@ document.addEventListener('DOMContentLoaded', () => {
     return { success: true, attendance: record };
   }
 
-  // --- 4. CLOUD MQTT OVER WSS ---
+  // --- 5. CLOUD MQTT OVER WSS ---
   function initCloudMqtt() {
     if (typeof mqtt === 'undefined') return;
 
@@ -982,27 +1111,35 @@ document.addEventListener('DOMContentLoaded', () => {
     const emptyState = liveActivityList.querySelector('.text-center');
     if (emptyState) emptyState.remove();
 
+    const isKeluar = record.type === 'KELUAR';
+    const typeBadge = isKeluar
+      ? '<span class="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-400 border border-rose-500/30">KELUAR</span>'
+      : '<span class="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">MASUK</span>';
+
     const item = document.createElement('div');
     item.className = 'p-3 bg-slate-950/70 border border-slate-800 rounded-xl flex items-center justify-between text-xs animate-fadeIn';
     item.innerHTML = `
       <div class="flex items-center gap-2.5">
-        <div class="w-7 h-7 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold text-xs">
+        <div class="w-7 h-7 rounded-lg ${isKeluar ? 'bg-rose-500/20 text-rose-400' : 'bg-emerald-500/20 text-emerald-400'} flex items-center justify-center font-bold text-xs">
           ${escapeHtml(record.name.charAt(0).toUpperCase())}
         </div>
         <div>
-          <div class="font-bold text-white text-xs">${escapeHtml(record.name)}</div>
+          <div class="font-bold text-white text-xs flex items-center gap-1.5">
+            <span>${escapeHtml(record.name)}</span>
+            ${typeBadge}
+          </div>
           <div class="text-[10px] text-slate-400 font-mono">${escapeHtml(record.token)}</div>
         </div>
       </div>
       <div class="text-right">
-        <div class="text-emerald-400 font-mono font-semibold">${escapeHtml(record.time)}</div>
+        <div class="${isKeluar ? 'text-rose-400' : 'text-emerald-400'} font-mono font-semibold">${escapeHtml(record.time)}</div>
         <div class="text-[10px] text-slate-500">${escapeHtml(record.device_info || 'Mobile')}</div>
       </div>
     `;
 
     liveActivityList.insertBefore(item, liveActivityList.firstChild);
     const count = liveActivityList.children.length;
-    liveFeedCount.textContent = `${count} hadir`;
+    liveFeedCount.textContent = `${count} aktivitas`;
   }
 
   function loadAuditData() {
@@ -1032,9 +1169,11 @@ document.addEventListener('DOMContentLoaded', () => {
         badge = '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-800 text-slate-400 border border-slate-700">KEDALUWARSA</span>';
       }
 
+      const typeLabel = t.type ? ` <span class="text-[9px] font-mono px-1 rounded ${t.type === 'KELUAR' ? 'bg-rose-500/20 text-rose-300' : 'bg-emerald-500/20 text-emerald-300'}">${t.type}</span>` : '';
+
       return `
         <tr class="hover:bg-slate-800/40 transition">
-          <td class="py-3 px-4">${badge}</td>
+          <td class="py-3 px-4">${badge}${typeLabel}</td>
           <td class="py-3 px-4 font-mono text-indigo-300 font-bold">${escapeHtml(t.token)}</td>
           <td class="py-3 px-4 font-semibold text-white">${escapeHtml(t.used_by_name || '-')}</td>
           <td class="py-3 px-4 font-mono text-[11px] text-slate-400 truncate max-w-[150px]">${escapeHtml(t.device_id || '-')}</td>
@@ -1045,41 +1184,165 @@ document.addEventListener('DOMContentLoaded', () => {
     }).join('');
   }
 
+  // --- 6. MULTI-TAB ATTENDANCE DATA LOADER (UTAMA, MASUK, KELUAR) ---
   function loadAttendanceData() {
     const all = getStoredAttendances();
     const todayStr = getLocalDateString(new Date());
 
-    const todayCount = all.filter(a => a.date === todayStr).length;
-    const uniqueDevices = new Set(all.map(a => a.device_id)).size;
+    // Calculate metrics
+    const masukToday = all.filter(a => a.date === todayStr && (a.type === 'MASUK' || !a.type));
+    const keluarToday = all.filter(a => a.date === todayStr && a.type === 'KELUAR');
 
-    metricToday.textContent = todayCount;
-    metricTotalRecords.textContent = all.length;
-    metricUniqueDevices.textContent = uniqueDevices;
+    // Kehadiran lengkap: device yang sudah masuk dan keluar pada hari ini
+    const masukDevices = new Set(masukToday.map(a => a.device_id));
+    const lengkapToday = keluarToday.filter(k => masukDevices.has(k.device_id)).length;
+
+    if (metricMasukToday) metricMasukToday.textContent = masukToday.length;
+    if (metricKeluarToday) metricKeluarToday.textContent = keluarToday.length;
+    if (metricLengkapToday) metricLengkapToday.textContent = lengkapToday;
+    if (metricTotalRecords) metricTotalRecords.textContent = all.length;
 
     const sTerm = (filterSearch.value || '').toLowerCase();
     const fDate = filterDate.value || '';
 
-    const filtered = all.filter(a => {
+    let records = all.filter(a => {
       const matchSearch = !sTerm || a.name.toLowerCase().includes(sTerm) || (a.device_info || '').toLowerCase().includes(sTerm) || a.token.toLowerCase().includes(sTerm);
       const matchDate = !fDate || a.date === fDate;
       return matchSearch && matchDate;
     });
 
-    if (filtered.length === 0) {
-      attendanceTableBody.innerHTML = `<tr><td colspan="6" class="py-8 text-center text-slate-500">Tidak ada data presensi yang cocok.</td></tr>`;
-      return;
-    }
+    if (activeSubTab === 'MASUK') {
+      // TAB 2: ABSENSI MASUK
+      attendanceTableHead.innerHTML = `
+        <tr>
+          <th class="py-3 px-4 w-12 text-center">#</th>
+          <th class="py-3 px-4">Nama Lengkap</th>
+          <th class="py-3 px-4">Hari & Tanggal</th>
+          <th class="py-3 px-4">Jam Masuk</th>
+          <th class="py-3 px-4">Token QR</th>
+          <th class="py-3 px-4">Perangkat</th>
+        </tr>
+      `;
+      const filtered = records.filter(a => a.type === 'MASUK' || !a.type);
+      if (filtered.length === 0) {
+        attendanceTableBody.innerHTML = `<tr><td colspan="6" class="py-8 text-center text-slate-500">Tidak ada data Absensi Masuk.</td></tr>`;
+        return;
+      }
+      attendanceTableBody.innerHTML = filtered.map((a, idx) => `
+        <tr class="hover:bg-slate-800/40 transition">
+          <td class="py-3 px-4 text-center text-slate-500 font-mono">${idx + 1}</td>
+          <td class="py-3 px-4 font-bold text-white flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+            <span>${escapeHtml(a.name)}</span>
+          </td>
+          <td class="py-3 px-4 text-slate-300">${escapeHtml(a.day)}, ${escapeHtml(a.date)}</td>
+          <td class="py-3 px-4 font-mono text-emerald-400 font-semibold">${escapeHtml(a.time)} WIB</td>
+          <td class="py-3 px-4 font-mono text-indigo-300 text-xs">${escapeHtml(a.token)}</td>
+          <td class="py-3 px-4 text-slate-400 text-xs">${escapeHtml(a.device_info || 'Perangkat')}</td>
+        </tr>
+      `).join('');
 
-    attendanceTableBody.innerHTML = filtered.map((a, idx) => `
-      <tr class="hover:bg-slate-800/40 transition">
-        <td class="py-3 px-4 text-center text-slate-500 font-mono">${idx + 1}</td>
-        <td class="py-3 px-4 font-bold text-white">${escapeHtml(a.name)}</td>
-        <td class="py-3 px-4 text-slate-300">${escapeHtml(a.day)}, ${escapeHtml(a.date)}</td>
-        <td class="py-3 px-4 font-mono text-emerald-400 font-semibold">${escapeHtml(a.time)}</td>
-        <td class="py-3 px-4 font-mono text-indigo-300 text-xs">${escapeHtml(a.token)}</td>
-        <td class="py-3 px-4 text-slate-400 text-xs">${escapeHtml(a.device_info || 'Perangkat')}</td>
-      </tr>
-    `).join('');
+    } else if (activeSubTab === 'KELUAR') {
+      // TAB 3: ABSENSI KELUAR
+      attendanceTableHead.innerHTML = `
+        <tr>
+          <th class="py-3 px-4 w-12 text-center">#</th>
+          <th class="py-3 px-4">Nama Lengkap</th>
+          <th class="py-3 px-4">Hari & Tanggal</th>
+          <th class="py-3 px-4">Jam Keluar</th>
+          <th class="py-3 px-4">Token QR</th>
+          <th class="py-3 px-4">Perangkat</th>
+        </tr>
+      `;
+      const filtered = records.filter(a => a.type === 'KELUAR');
+      if (filtered.length === 0) {
+        attendanceTableBody.innerHTML = `<tr><td colspan="6" class="py-8 text-center text-slate-500">Tidak ada data Absensi Keluar.</td></tr>`;
+        return;
+      }
+      attendanceTableBody.innerHTML = filtered.map((a, idx) => `
+        <tr class="hover:bg-slate-800/40 transition">
+          <td class="py-3 px-4 text-center text-slate-500 font-mono">${idx + 1}</td>
+          <td class="py-3 px-4 font-bold text-white flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-rose-400"></span>
+            <span>${escapeHtml(a.name)}</span>
+          </td>
+          <td class="py-3 px-4 text-slate-300">${escapeHtml(a.day)}, ${escapeHtml(a.date)}</td>
+          <td class="py-3 px-4 font-mono text-rose-400 font-semibold">${escapeHtml(a.time)} WIB</td>
+          <td class="py-3 px-4 font-mono text-indigo-300 text-xs">${escapeHtml(a.token)}</td>
+          <td class="py-3 px-4 text-slate-400 text-xs">${escapeHtml(a.device_info || 'Perangkat')}</td>
+        </tr>
+      `).join('');
+
+    } else {
+      // TAB 1: ABSENSI UTAMA (REKAP TERPADU MASUK + KELUAR)
+      attendanceTableHead.innerHTML = `
+        <tr>
+          <th class="py-3 px-4 w-12 text-center">#</th>
+          <th class="py-3 px-4">Nama Lengkap</th>
+          <th class="py-3 px-4">Hari & Tanggal</th>
+          <th class="py-3 px-4">Jam Masuk</th>
+          <th class="py-3 px-4">Jam Keluar</th>
+          <th class="py-3 px-4">Status</th>
+          <th class="py-3 px-4">Perangkat</th>
+        </tr>
+      `;
+
+      // Kelompokkan berdasarkan device_id dan tanggal
+      const groupMap = new Map();
+      records.forEach(rec => {
+        const key = `${rec.device_id}_${rec.date}`;
+        if (!groupMap.has(key)) {
+          groupMap.set(key, {
+            name: rec.name,
+            day: rec.day,
+            date: rec.date,
+            device_info: rec.device_info,
+            device_id: rec.device_id,
+            masuk: null,
+            keluar: null
+          });
+        }
+        const item = groupMap.get(key);
+        if (rec.type === 'KELUAR') {
+          item.keluar = rec;
+        } else {
+          item.masuk = rec;
+          item.name = rec.name; // prioritaskan nama saat absen masuk
+        }
+      });
+
+      const paired = Array.from(groupMap.values());
+      if (paired.length === 0) {
+        attendanceTableBody.innerHTML = `<tr><td colspan="7" class="py-8 text-center text-slate-500">Belum ada data absensi utama.</td></tr>`;
+        return;
+      }
+
+      attendanceTableBody.innerHTML = paired.map((p, idx) => {
+        const hasMasuk = !!p.masuk;
+        const hasKeluar = !!p.keluar;
+        let badgeStatus = '';
+
+        if (hasMasuk && hasKeluar) {
+          badgeStatus = '<span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">LENGKAP</span>';
+        } else if (hasMasuk) {
+          badgeStatus = '<span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-400 border border-amber-500/30">BELUM KELUAR</span>';
+        } else {
+          badgeStatus = '<span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/15 text-rose-400 border border-rose-500/30">HANYA KELUAR</span>';
+        }
+
+        return `
+          <tr class="hover:bg-slate-800/40 transition">
+            <td class="py-3 px-4 text-center text-slate-500 font-mono">${idx + 1}</td>
+            <td class="py-3 px-4 font-bold text-white">${escapeHtml(p.name)}</td>
+            <td class="py-3 px-4 text-slate-300">${escapeHtml(p.day)}, ${escapeHtml(p.date)}</td>
+            <td class="py-3 px-4 font-mono text-emerald-400 font-semibold">${hasMasuk ? escapeHtml(p.masuk.time) + ' WIB' : '<span class="text-slate-500">-</span>'}</td>
+            <td class="py-3 px-4 font-mono text-rose-400 font-semibold">${hasKeluar ? escapeHtml(p.keluar.time) + ' WIB' : '<span class="text-slate-500">-</span>'}</td>
+            <td class="py-3 px-4">${badgeStatus}</td>
+            <td class="py-3 px-4 text-slate-400 text-xs">${escapeHtml(p.device_info || 'Perangkat')}</td>
+          </tr>
+        `;
+      }).join('');
+    }
   }
 
   // Copy URL & Buttons
@@ -1116,7 +1379,7 @@ document.addEventListener('DOMContentLoaded', () => {
     loadAttendanceData();
   });
 
-  // Export CSV
+  // Export CSV dengan dukungan format multi-tab (Utama / Masuk / Keluar)
   btnExportCsv.addEventListener('click', () => {
     const records = getStoredAttendances();
     if (records.length === 0) {
@@ -1124,28 +1387,71 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    const headers = ['ID', 'Nama Lengkap', 'Hari', 'Tanggal', 'Jam Hadir', 'Token QR', 'Device ID', 'Device Info'];
-    const rows = records.map(att => [
-      att.id,
-      `"${att.name.replace(/"/g, '""')}"`,
-      `"${att.day}"`,
-      `"${att.date}"`,
-      `"${att.time}"`,
-      `"${att.token}"`,
-      `"${att.device_id}"`,
-      `"${(att.device_info || '').replace(/"/g, '""')}"`
-    ]);
+    const dateStr = new Date().toISOString().split('T')[0];
 
+    if (activeSubTab === 'UTAMA') {
+      const headers = ['No', 'Nama Lengkap', 'Hari', 'Tanggal', 'Jam Masuk', 'Jam Keluar', 'Status', 'Device ID', 'Device Info'];
+      const groupMap = new Map();
+      records.forEach(rec => {
+        const key = `${rec.device_id}_${rec.date}`;
+        if (!groupMap.has(key)) {
+          groupMap.set(key, {
+            name: rec.name,
+            day: rec.day,
+            date: rec.date,
+            device_info: rec.device_info,
+            device_id: rec.device_id,
+            masuk: null,
+            keluar: null
+          });
+        }
+        const item = groupMap.get(key);
+        if (rec.type === 'KELUAR') item.keluar = rec;
+        else item.masuk = rec;
+      });
+
+      const paired = Array.from(groupMap.values());
+      const rows = paired.map((p, idx) => [
+        idx + 1,
+        `"${p.name.replace(/"/g, '""')}"`,
+        `"${p.day}"`,
+        `"${p.date}"`,
+        `"${p.masuk ? p.masuk.time : '-'}"`,
+        `"${p.keluar ? p.keluar.time : '-'}"`,
+        `"${(p.masuk && p.keluar) ? 'LENGKAP' : (p.masuk ? 'BELUM KELUAR' : 'HANYA KELUAR')}"`,
+        `"${p.device_id}"`,
+        `"${(p.device_info || '').replace(/"/g, '""')}"`
+      ]);
+      downloadCsv(headers, rows, `Rekap_Presensi_Utama_${dateStr}.csv`);
+    } else {
+      const typeFilter = activeSubTab;
+      const filtered = records.filter(a => typeFilter === 'KELUAR' ? a.type === 'KELUAR' : (a.type === 'MASUK' || !a.type));
+      const headers = ['No', 'Jenis Presensi', 'Nama Lengkap', 'Hari', 'Tanggal', 'Jam', 'Token QR', 'Device ID', 'Device Info'];
+      const rows = filtered.map((att, idx) => [
+        idx + 1,
+        `"${att.type || 'MASUK'}"`,
+        `"${att.name.replace(/"/g, '""')}"`,
+        `"${att.day}"`,
+        `"${att.date}"`,
+        `"${att.time}"`,
+        `"${att.token}"`,
+        `"${att.device_id}"`,
+        `"${(att.device_info || '').replace(/"/g, '""')}"`
+      ]);
+      downloadCsv(headers, rows, `Rekap_Presensi_${typeFilter}_${dateStr}.csv`);
+    }
+  });
+
+  function downloadCsv(headers, rows, filename) {
     const csvContent = '\uFEFF' + [headers.join(','), ...rows.map(r => r.join(','))].join('\r\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
-    const dateStr = new Date().toISOString().split('T')[0];
     link.href = URL.createObjectURL(blob);
-    link.setAttribute('download', `Rekap_Presensi_QR_${dateStr}.csv`);
+    link.setAttribute('download', filename);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-  });
+  }
 
   // Reset Data
   btnResetData.addEventListener('click', async () => {

@@ -30,6 +30,7 @@ db.exec(`
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     token TEXT NOT NULL,
     name TEXT NOT NULL,
+    type TEXT NOT NULL DEFAULT 'MASUK',
     date TEXT NOT NULL,
     day TEXT NOT NULL,
     time TEXT NOT NULL,
@@ -43,6 +44,11 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_attendance_date ON attendance_records(date);
   CREATE INDEX IF NOT EXISTS idx_attendance_device ON attendance_records(device_id, date);
 `);
+
+// Safe column addition if table already existed
+try {
+  db.exec(`ALTER TABLE attendance_records ADD COLUMN type TEXT NOT NULL DEFAULT 'MASUK';`);
+} catch (e) {}
 
 // Repository helpers
 const QRTokenModel = {
@@ -135,19 +141,47 @@ const AttendanceModel = {
     return stmt.get(deviceId, date);
   },
 
+  hasDeviceAttendedMasuk(deviceId, date) {
+    const stmt = db.prepare(`
+      SELECT id, name, time FROM attendance_records 
+      WHERE device_id = ? AND date = ? AND type = 'MASUK'
+      LIMIT 1
+    `);
+    return stmt.get(deviceId, date);
+  },
+
+  hasDeviceAttendedKeluar(deviceId, date) {
+    const stmt = db.prepare(`
+      SELECT id, name, time FROM attendance_records 
+      WHERE device_id = ? AND date = ? AND type = 'KELUAR'
+      LIMIT 1
+    `);
+    return stmt.get(deviceId, date);
+  },
+
+  getMasukRecord(deviceId, date) {
+    const stmt = db.prepare(`
+      SELECT id, name, time FROM attendance_records 
+      WHERE device_id = ? AND date = ? AND type = 'MASUK'
+      LIMIT 1
+    `);
+    return stmt.get(deviceId, date);
+  },
+
   // Create attendance record
-  createAttendance({ token, name, date, day, time, deviceId, deviceInfo }) {
+  createAttendance({ token, name, type = 'MASUK', date, day, time, deviceId, deviceInfo }) {
     const now = new Date().toISOString();
     const stmt = db.prepare(`
       INSERT INTO attendance_records 
-      (token, name, date, day, time, device_id, device_info, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      (token, name, type, date, day, time, device_id, device_info, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
-    const info = stmt.run(token, name, date, day, time, deviceId, deviceInfo || '', now);
+    const info = stmt.run(token, name, type, date, day, time, deviceId, deviceInfo || '', now);
     return {
       id: info.lastInsertRowid,
       token,
       name,
+      type,
       date,
       day,
       time,

@@ -111,6 +111,68 @@
 
 
   <!-- ======================================================== -->
+  <!-- MODAL 1.5: PILIHAN JENIS ABSENSI (MASUK / KELUAR)       -->
+  <!-- ======================================================== -->
+  <div id="absensiChoiceModal" class="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4 hidden">
+    <div class="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl space-y-5 text-center relative overflow-hidden">
+      <div class="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-emerald-500 via-indigo-500 to-rose-500"></div>
+
+      <div class="w-14 h-14 rounded-2xl bg-indigo-500/15 text-indigo-400 mx-auto flex items-center justify-center border border-indigo-500/25">
+        <i data-lucide="user-check" class="w-7 h-7"></i>
+      </div>
+
+      <div>
+        <h3 class="text-xl font-extrabold text-white tracking-tight">Pilih Jenis Absensi</h3>
+        <p class="text-xs text-slate-400 mt-1">Silakan tentukan jenis presensi yang ingin Anda lakukan</p>
+      </div>
+
+      <div class="space-y-3 pt-1">
+        <!-- Choice 1: Absensi Masuk -->
+        <button id="btnChoiceMasuk" type="button"
+          class="w-full py-4 px-4 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-sm shadow-lg shadow-emerald-600/25 transition flex items-center justify-between group">
+          <div class="flex items-center gap-3 text-left">
+            <div class="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center text-white">
+              <i data-lucide="log-in" class="w-5 h-5"></i>
+            </div>
+            <div>
+              <div class="font-bold text-base">Absensi Masuk</div>
+              <div class="text-xs text-emerald-100/80">Presensi kehadiran awal hari</div>
+            </div>
+          </div>
+          <i data-lucide="arrow-right" class="w-5 h-5 text-white/70 group-hover:text-white transition"></i>
+        </button>
+
+        <!-- Choice 2: Absensi Keluar -->
+        <button id="btnChoiceKeluar" type="button"
+          class="w-full py-4 px-4 rounded-2xl bg-gradient-to-r from-rose-600 to-amber-600 hover:from-rose-500 hover:to-amber-500 text-white font-bold text-sm shadow-lg shadow-rose-600/25 transition flex items-center justify-between group">
+          <div class="flex items-center gap-3 text-left">
+            <div class="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center text-white">
+              <i data-lucide="log-out" class="w-5 h-5"></i>
+            </div>
+            <div>
+              <div class="font-bold text-base">Absensi Keluar</div>
+              <div class="text-xs text-rose-100/80">Presensi kepulangan (wajib sudah absen masuk)</div>
+            </div>
+          </div>
+          <i data-lucide="arrow-right" class="w-5 h-5 text-white/70 group-hover:text-white transition"></i>
+        </button>
+      </div>
+
+      <!-- Warning info for Absensi Keluar -->
+      <div class="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-300 text-left flex items-start gap-2">
+        <i data-lucide="alert-triangle" class="w-4 h-4 text-amber-400 shrink-0 mt-0.5"></i>
+        <span><strong>Perhatian:</strong> Absensi Keluar hanya bisa diproses jika perangkat dan nama Anda sudah tercatat pada Absensi Masuk hari ini.</span>
+      </div>
+
+      <button type="button" id="btnCancelChoice"
+        class="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition">
+        Kembali ke Menu Awal
+      </button>
+    </div>
+  </div>
+
+
+  <!-- ======================================================== -->
   <!-- MODAL 2: ADMIN LOGIN POPUP                               -->
   <!-- ======================================================== -->
   <div id="adminLoginModal" class="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4 hidden">
@@ -172,7 +234,7 @@
       <div class="flex items-center justify-between pb-2 border-b border-slate-800">
         <div class="flex items-center gap-2">
           <i data-lucide="camera" class="w-4 h-4 text-indigo-400"></i>
-          <span class="font-bold text-sm text-white">Absensi - Scan QR</span>
+          <span id="cameraModalTitle" class="font-bold text-sm text-white">Absensi Masuk - Scan QR</span>
         </div>
         <button id="btnCloseCamera" class="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition">
           <i data-lucide="x" class="w-5 h-5"></i>
@@ -201,14 +263,14 @@
           </div>
         </div>
 
-        <!-- LOGO UPLOAD FOTO LANGSUNG DI BORDER KAMERA (Floating Button) -->
+        <!-- LOGO UPLOAD FOTO TUNGGAL DI BORDER KAMERA (Satu-satunya Tombol Upload) -->
         <div class="absolute bottom-3 right-3 z-30">
-          <button type="button" id="btnUploadFromScanner" title="Pilih QR dari Galeri Foto / Storage"
-            class="px-3 py-2 rounded-xl bg-slate-900/90 hover:bg-slate-800 text-white text-xs font-semibold border-2 border-emerald-500/80 hover:border-emerald-400 shadow-2xl backdrop-blur-md flex items-center gap-2 group/btn transition active:scale-95">
+          <button type="button" id="btnUploadFromScanner" title="Pilih QR dari Galeri Foto / Drive / File"
+            class="px-3.5 py-2 rounded-xl bg-slate-900/90 hover:bg-slate-800 text-white text-xs font-semibold border-2 border-emerald-500/80 hover:border-emerald-400 shadow-2xl backdrop-blur-md flex items-center gap-2 group/btn transition active:scale-95">
             <div class="w-5 h-5 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center group-hover/btn:scale-110 transition">
               <i data-lucide="image" class="w-3.5 h-3.5"></i>
             </div>
-            <span class="text-emerald-300 font-bold text-[11px]">Upload Foto</span>
+            <span class="text-emerald-300 font-bold text-[11px]">Upload Foto QR</span>
           </button>
         </div>
 
@@ -223,16 +285,10 @@
         </div>
       </div>
 
-      <!-- Bottom Bar Around Border -->
-      <div class="flex items-center justify-between text-xs px-1">
-        <span class="text-[11px] text-slate-400">
-          Scan layar proyektor atau upload foto
-        </span>
-        <button type="button" id="btnUploadFromScannerAlt" class="text-emerald-400 hover:text-emerald-300 text-[11px] font-semibold flex items-center gap-1.5 py-1 px-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 hover:bg-emerald-500/20 transition">
-          <i data-lucide="upload" class="w-3.5 h-3.5"></i>
-          <span>Pilih File / Drive</span>
-        </button>
-      </div>
+      <!-- Bottom Hint Note (No duplicate button) -->
+      <p class="text-[11px] text-slate-400">
+        Arahkan kamera ke QR proyektor atau klik tombol <strong>Upload Foto QR</strong> di sudut kamera.
+      </p>
 
       <!-- Hidden file input for photo upload -->
       <input type="file" id="inputQrFile" accept="image/*" class="hidden">
@@ -251,6 +307,7 @@
         <div class="flex items-center gap-2">
           <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
           <span class="font-bold text-sm text-white">Formulir Presensi</span>
+          <span id="inlineTypeBadge" class="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 uppercase">MASUK</span>
         </div>
         <span id="inlineTokenBadge" class="font-mono text-[11px] text-indigo-300 bg-slate-800 px-2 py-0.5 rounded border border-slate-700">QR-TOKEN</span>
       </div>
@@ -258,8 +315,14 @@
       <!-- Form Section -->
       <div id="inlineFormWrapper" class="space-y-4">
         <div>
-          <h4 class="text-base font-bold text-white">Isi Identitas Kehadiran</h4>
-          <p class="text-xs text-slate-400">Lengkapi nama Anda untuk mencatat kehadiran.</p>
+          <h4 id="inlineFormTitle" class="text-base font-bold text-white">Isi Identitas Kehadiran</h4>
+          <p id="inlineFormSubtitle" class="text-xs text-slate-400">Lengkapi nama Anda untuk mencatat kehadiran masuk.</p>
+        </div>
+
+        <!-- Warning info specifically for Absensi Keluar -->
+        <div id="inlineKeluarNotice" class="hidden p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/25 text-[11px] text-amber-300 text-left flex items-start gap-2">
+          <i data-lucide="info" class="w-4 h-4 text-amber-400 shrink-0 mt-0.5"></i>
+          <span><strong>Info Absensi Keluar:</strong> Masukkan nama lengkap yang persis sama saat Absensi Masuk. Sistem akan memverifikasi riwayat check-in perangkat ini.</span>
         </div>
 
         <form id="inlineAttendForm" class="space-y-3.5">
@@ -618,40 +681,68 @@
         </div>
       </section>
 
-      <!-- TAB 3: DAFTAR HADIR -->
+      <!-- TAB 3: DAFTAR HADIR (ABSENSI UTAMA, MASUK, KELUAR) -->
       <section id="viewAttendance" class="hidden space-y-6">
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <!-- 4 Metric Cards -->
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <div class="bg-slate-900 border border-slate-800 p-4 rounded-2xl flex items-center justify-between">
             <div>
-              <span class="text-xs text-slate-400 font-medium">Presensi Hari Ini</span>
-              <div id="metricToday" class="text-2xl font-extrabold text-emerald-400 mt-1">0</div>
+              <span class="text-xs text-slate-400 font-medium">Masuk Hari Ini</span>
+              <div id="metricMasukToday" class="text-2xl font-extrabold text-emerald-400 mt-1">0</div>
             </div>
             <div class="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center">
-              <i data-lucide="calendar" class="w-5 h-5"></i>
+              <i data-lucide="log-in" class="w-5 h-5"></i>
             </div>
           </div>
 
           <div class="bg-slate-900 border border-slate-800 p-4 rounded-2xl flex items-center justify-between">
             <div>
-              <span class="text-xs text-slate-400 font-medium">Total Presensi</span>
-              <div id="metricTotalRecords" class="text-2xl font-extrabold text-white mt-1">0</div>
+              <span class="text-xs text-slate-400 font-medium">Keluar Hari Ini</span>
+              <div id="metricKeluarToday" class="text-2xl font-extrabold text-rose-400 mt-1">0</div>
+            </div>
+            <div class="w-10 h-10 rounded-xl bg-rose-500/10 text-rose-400 flex items-center justify-center">
+              <i data-lucide="log-out" class="w-5 h-5"></i>
+            </div>
+          </div>
+
+          <div class="bg-slate-900 border border-slate-800 p-4 rounded-2xl flex items-center justify-between">
+            <div>
+              <span class="text-xs text-slate-400 font-medium">Lengkap (In + Out)</span>
+              <div id="metricLengkapToday" class="text-2xl font-extrabold text-indigo-400 mt-1">0</div>
             </div>
             <div class="w-10 h-10 rounded-xl bg-indigo-500/10 text-indigo-400 flex items-center justify-center">
-              <i data-lucide="users" class="w-5 h-5"></i>
+              <i data-lucide="user-check" class="w-5 h-5"></i>
             </div>
           </div>
 
           <div class="bg-slate-900 border border-slate-800 p-4 rounded-2xl flex items-center justify-between">
             <div>
-              <span class="text-xs text-slate-400 font-medium">Perangkat Unik</span>
-              <div id="metricUniqueDevices" class="text-2xl font-extrabold text-purple-400 mt-1">0</div>
+              <span class="text-xs text-slate-400 font-medium">Total Seluruh Data</span>
+              <div id="metricTotalRecords" class="text-2xl font-extrabold text-purple-400 mt-1">0</div>
             </div>
             <div class="w-10 h-10 rounded-xl bg-purple-500/10 text-purple-400 flex items-center justify-center">
-              <i data-lucide="smartphone" class="w-5 h-5"></i>
+              <i data-lucide="database" class="w-5 h-5"></i>
             </div>
           </div>
         </div>
 
+        <!-- SUB-TABS: Absensi Utama, Absensi Masuk, Absensi Keluar -->
+        <div class="flex flex-wrap items-center gap-2 border-b border-slate-800 pb-3">
+          <button id="subTabUtama" type="button" class="subtab-btn active px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-2 bg-indigo-600 text-white shadow-lg shadow-indigo-600/25">
+            <i data-lucide="layers" class="w-4 h-4"></i>
+            <span>Absensi Utama (Masuk + Keluar)</span>
+          </button>
+          <button id="subTabMasuk" type="button" class="subtab-btn px-4 py-2.5 rounded-xl text-xs font-semibold transition flex items-center gap-2 text-slate-400 hover:text-white bg-slate-900 border border-slate-800 hover:border-emerald-500/50">
+            <i data-lucide="log-in" class="w-4 h-4 text-emerald-400"></i>
+            <span>Absensi Masuk</span>
+          </button>
+          <button id="subTabKeluar" type="button" class="subtab-btn px-4 py-2.5 rounded-xl text-xs font-semibold transition flex items-center gap-2 text-slate-400 hover:text-white bg-slate-900 border border-slate-800 hover:border-rose-500/50">
+            <i data-lucide="log-out" class="w-4 h-4 text-rose-400"></i>
+            <span>Absensi Keluar</span>
+          </button>
+        </div>
+
+        <!-- Filter & Actions Bar -->
         <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-3">
           <div class="flex flex-wrap items-center gap-2.5 flex-1 min-w-[280px]">
             <div class="relative flex-1 min-w-[180px]">
@@ -685,21 +776,23 @@
           </div>
         </div>
 
+        <!-- Table View with Dynamic Header -->
         <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
           <div class="overflow-x-auto">
             <table class="w-full text-left text-xs text-slate-300">
-              <thead class="bg-slate-950/80 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-800">
+              <thead id="attendanceTableHead" class="bg-slate-950/80 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-800">
                 <tr>
                   <th class="py-3 px-4 w-12 text-center">#</th>
                   <th class="py-3 px-4">Nama Lengkap</th>
                   <th class="py-3 px-4">Hari & Tanggal</th>
-                  <th class="py-3 px-4">Jam Hadir</th>
-                  <th class="py-3 px-4">Token QR</th>
+                  <th class="py-3 px-4">Jam Masuk</th>
+                  <th class="py-3 px-4">Jam Keluar</th>
+                  <th class="py-3 px-4">Status Kehadiran</th>
                   <th class="py-3 px-4">Perangkat</th>
                 </tr>
               </thead>
               <tbody id="attendanceTableBody" class="divide-y divide-slate-800 font-medium">
-                <tr><td colspan="6" class="py-8 text-center text-slate-500">Memuat data...</td></tr>
+                <tr><td colspan="7" class="py-8 text-center text-slate-500">Memuat data...</td></tr>
               </tbody>
             </table>
           </div>
