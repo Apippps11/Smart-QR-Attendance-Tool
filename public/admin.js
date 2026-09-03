@@ -1,8 +1,9 @@
 /**
  * Admin Dashboard Controller (admin.js)
- * Mendukung mode Dual-Engine:
- * 1. Mode Cloud Peerless / GitHub Pages (PeerJS + Client-side QRCode + BroadcastChannel + LocalStorage)
- * 2. Mode Server Node.js (Socket.io + Express API)
+ * Mendukung:
+ * 1. Multi-layered QR Generator (Anti-blank: QRServer API + QRCodeJS Canvas Fallback)
+ * 2. Real-time Multi-Provider Cloud Sync (MQTT WSS over SSL: bisa beda provider / beda Wi-Fi / kuota 4G)
+ * 3. LocalStorage Persistence + Node.js Server Mode
  */
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -16,6 +17,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const viewAttendance = document.getElementById('viewAttendance');
 
   const qrImage = document.getElementById('qrImage');
+  const qrCanvasContainer = document.getElementById('qrCanvasContainer');
   const qrCardBox = document.getElementById('qrCardBox');
   const qrOverlayLoading = document.getElementById('qrOverlayLoading');
   const activeTokenText = document.getElementById('activeTokenText');
@@ -53,9 +55,17 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnExportCsv = document.getElementById('btnExportCsv');
   const btnResetData = document.getElementById('btnResetData');
 
-  // Local Storage Repository Keys (for GitHub Pages / Standalone mode)
+  // Storage Keys
   const STORAGE_QR_TOKENS = 'sqr_qr_tokens';
   const STORAGE_ATTENDANCES = 'sqr_attendances';
+  const STORAGE_SESSION = 'sqr_admin_session_id';
+
+  // Persistent Admin Session ID (so QR link stays valid)
+  let adminSessionId = localStorage.getItem(STORAGE_SESSION);
+  if (!adminSessionId) {
+    adminSessionId = 'ses_' + Math.random().toString(36).substring(2, 9) + Date.now().toString(36).substring(4);
+    localStorage.setItem(STORAGE_SESSION, adminSessionId);
+  }
 
   function getStoredTokens() {
     try {
@@ -82,11 +92,11 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   let currentActiveToken = null;
-  let adminPeerId = null;
   let isServerMode = false;
+  let mqttClient = null;
   const broadcast = ('BroadcastChannel' in window) ? new BroadcastChannel('smart_qr_channel') : null;
 
-  // --- 1. WEB AUDIO API CHIME (Sound on Attendance Scan) ---
+  // --- 1. WEB AUDIO API CHIME ---
   function playSuccessChime() {
     try {
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
@@ -136,35 +146,9 @@ document.addEventListener('DOMContentLoaded', () => {
   setInterval(updateClock, 1000);
   updateClock();
 
-  // --- 3. CLIENT-SIDE QR GENERATION & ROTATION ---
+  // --- 3. BULLETPROOF MULTI-LAYERED QR GENERATION (ANTI-BLANK) ---
   function generateRandomToken() {
     return 'QR-' + Date.now().toString(36).toUpperCase() + '-' + Math.random().toString(36).substring(2, 7).toUpperCase();
-  }
-
-  async function createNewActiveToken() {
-    const newToken = generateRandomToken();
-    const now = new Date().toISOString();
-
-    const tokens = getStoredTokens();
-    // Mark previous ACTIVE tokens as EXPIRED
-    tokens.forEach(t => {
-      if (t.status === 'ACTIVE') t.status = 'EXPIRED';
-    });
-
-    tokens.unshift({
-      token: newToken,
-      status: 'ACTIVE',
-      created_at: now,
-      used_at: null,
-      used_by_name: null,
-      device_id: null
-    });
-    saveTokens(tokens);
-    currentActiveToken = newToken;
-
-    await renderActiveQrCode(newToken);
-    broadcastTokenUpdate(newToken);
-    return newToken;
   }
 
   function getBaseAppUrl() {
@@ -178,47 +162,81 @@ document.addEventListener('DOMContentLoaded', () => {
     return window.location.origin + path;
   }
 
-  async function renderActiveQrCode(token) {
+  function renderActiveQrCode(token) {
     const base = getBaseAppUrl();
-    let attendUrl = `${base}attend.html?token=${encodeURIComponent(token)}`;
-    if (adminPeerId) {
-      attendUrl += `&admin=${encodeURIComponent(adminPeerId)}`;
-    }
+    const attendUrl = `${base}attend.html?token=${encodeURIComponent(token)}&session=${encodeURIComponent(adminSessionId)}`;
 
-    try {
-      const dataUrl = await QRCode.toDataURL(attendUrl, {
-        errorCorrectionLevel: 'M',
-        margin: 2,
-        scale: 8,
-        color: {
-          dark: '#0f172a',
-          light: '#ffffff'
-        }
-      });
+    currentActiveToken = token;
+    activeTokenText.textContent = token;
+    mobileAccessUrl.textContent = attendUrl;
+    mobileAccessUrl.dataset.url = attendUrl;
 
-      qrImage.src = dataUrl;
-      activeTokenText.textContent = token;
-      mobileAccessUrl.textContent = attendUrl;
-      mobileAccessUrl.dataset.url = attendUrl;
+    qrOverlayLoading.classList.remove('hidden');
+
+    // 1. Primary: High-speed QR Server Generator (Never fails, zero js dependencies)
+    const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&margin=8&data=${encodeURIComponent(attendUrl)}`;
+    qrImage.src = qrApiUrl;
+    qrImage.classList.remove('hidden');
+    qrCanvasContainer.classList.add('hidden');
+
+    qrImage.onload = () => {
       qrOverlayLoading.classList.add('hidden');
-    } catch (err) {
-      console.error('Error generating QR image:', err);
-    }
-  }
+    };
 
-  function broadcastTokenUpdate(token) {
+    // 2. Fallback: If external image is blocked/offline, render via QRCode.js canvas
+    qrImage.onerror = () => {
+      if (typeof QRCode !== 'undefined') {
+        qrCanvasContainer.innerHTML = '';
+        new QRCode(qrCanvasContainer, {
+          text: attendUrl,
+          width: 280,
+          height: 280,
+          colorDark: '#0f172a',
+          colorLight: '#ffffff',
+          correctLevel: QRCode.CorrectLevel.M
+        });
+        qrImage.classList.add('hidden');
+        qrCanvasContainer.classList.remove('hidden');
+      }
+      qrOverlayLoading.classList.add('hidden');
+    };
+
+    // Broadcast update to any open tabs
     if (broadcast) {
-      broadcast.postMessage({ type: 'ACTIVE_TOKEN_UPDATED', token, adminPeerId });
+      broadcast.postMessage({ type: 'ACTIVE_TOKEN_UPDATED', token, sessionId: adminSessionId });
     }
   }
 
-  // --- 4. ATTENDANCE SUBMISSION ENGINE (Validates Single-Use & Device Lock) ---
+  function createNewActiveToken() {
+    const newToken = generateRandomToken();
+    const now = new Date().toISOString();
+
+    const tokens = getStoredTokens();
+    tokens.forEach(t => {
+      if (t.status === 'ACTIVE') t.status = 'EXPIRED';
+    });
+
+    tokens.unshift({
+      token: newToken,
+      status: 'ACTIVE',
+      created_at: now,
+      used_at: null,
+      used_by_name: null,
+      device_id: null
+    });
+    saveTokens(tokens);
+
+    renderActiveQrCode(newToken);
+    return newToken;
+  }
+
+  // --- 4. ATTENDANCE VERIFICATION & RECORD ENGINE ---
   function processAttendanceSubmission({ token, name, date, day, time, deviceId, deviceInfo }) {
     const tokens = getStoredTokens();
     const targetToken = tokens.find(t => t.token === token);
 
     if (!targetToken) {
-      return { success: false, error: 'QR Code tidak ditemukan dalam sistem.' };
+      return { success: false, error: 'QR Code tidak terdaftar dalam sistem!' };
     }
 
     if (targetToken.status === 'USED') {
@@ -231,7 +249,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (targetToken.status === 'EXPIRED') {
       return {
         success: false,
-        error: 'QR Code sudah kedaluwarsa karena admin telah memperbarui kode QR.'
+        error: 'QR Code sudah kedaluwarsa karena admin telah me-refresh kode QR.'
       };
     }
 
@@ -247,7 +265,7 @@ document.addEventListener('DOMContentLoaded', () => {
       };
     }
 
-    // Mark token USED
+    // Mark token as USED
     const now = new Date().toISOString();
     targetToken.status = 'USED';
     targetToken.used_at = now;
@@ -255,7 +273,7 @@ document.addEventListener('DOMContentLoaded', () => {
     targetToken.device_id = deviceId;
     saveTokens(tokens);
 
-    // Save attendance record
+    // Record attendance
     const newRecord = {
       id: Date.now(),
       token,
@@ -298,73 +316,91 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // --- 5. PEERJS CLOUD MULTI-DEVICE SYNC (For GitHub Pages / Remote Mobile Scan) ---
-  function initPeerJs() {
-    if (typeof Peer === 'undefined') return;
+  // --- 5. CLOUD MULTI-PROVIDER REAL-TIME SYNC VIA MQTT WSS ---
+  function initCloudMqtt() {
+    if (typeof mqtt === 'undefined') {
+      console.warn('MQTT library not available, using local sync.');
+      return;
+    }
 
-    // Generate readable random peer ID
-    const randomSuffix = Math.random().toString(36).substring(2, 8);
-    const peer = new Peer('sqr-admin-' + randomSuffix);
+    const brokerUrl = 'wss://broker.emqx.io:8084/mqtt';
+    const clientId = 'sqr_admin_' + Math.random().toString(16).substring(2, 10);
 
-    peer.on('open', (id) => {
-      adminPeerId = id;
-      syncBadgeText.textContent = 'Cloud Peer Active';
-      console.log('PeerJS Cloud Signaling Active. Admin ID:', id);
-      // Re-render QR with admin peer parameter
-      if (currentActiveToken) {
-        renderActiveQrCode(currentActiveToken);
-      }
-    });
+    try {
+      mqttClient = mqtt.connect(brokerUrl, {
+        clientId,
+        clean: true,
+        connectTimeout: 5000,
+        reconnectPeriod: 3000
+      });
 
-    peer.on('connection', (conn) => {
-      conn.on('data', (data) => {
-        if (data && data.action === 'SUBMIT_ATTENDANCE') {
-          const result = processAttendanceSubmission(data.payload);
-          conn.send({ action: 'ATTENDANCE_RESULT', result });
-        } else if (data && data.action === 'CHECK_TOKEN') {
-          const tokens = getStoredTokens();
-          const t = tokens.find(item => item.token === data.token);
-          if (!t) {
-            conn.send({ action: 'CHECK_TOKEN_RESULT', valid: false, status: 'NOT_FOUND', message: 'QR Code tidak terdaftar.' });
-          } else if (t.status === 'USED') {
-            conn.send({ action: 'CHECK_TOKEN_RESULT', valid: false, status: 'USED', message: `QR Code ini sudah pernah digunakan oleh ${t.used_by_name || 'pengguna lain'}.` });
-          } else if (t.status === 'EXPIRED') {
-            conn.send({ action: 'CHECK_TOKEN_RESULT', valid: false, status: 'EXPIRED', message: 'QR Code sudah kedaluwarsa.' });
-          } else {
-            conn.send({ action: 'CHECK_TOKEN_RESULT', valid: true, status: 'ACTIVE', token: t.token });
+      mqttClient.on('connect', () => {
+        console.log('Connected to Cloud Real-time MQTT Broker via WSS!');
+        syncBadgeText.textContent = 'Cloud Sync (Beda Provider Aktif)';
+
+        // Subscribe to submission channel for this admin session
+        const submitTopic = `smartqr/${adminSessionId}/submit`;
+        const checkTopic = `smartqr/${adminSessionId}/check`;
+
+        mqttClient.subscribe([submitTopic, checkTopic], (err) => {
+          if (!err) {
+            console.log(`Subscribed to ${submitTopic}`);
           }
+        });
+      });
+
+      mqttClient.on('message', (topic, message) => {
+        try {
+          const payload = JSON.parse(message.toString());
+          if (topic.endsWith('/submit')) {
+            const result = processAttendanceSubmission(payload);
+            // Send acknowledgement back to attendee
+            const respTopic = `smartqr/${adminSessionId}/resp/${payload.reqId}`;
+            mqttClient.publish(respTopic, JSON.stringify(result));
+          } else if (topic.endsWith('/check')) {
+            const tokens = getStoredTokens();
+            const t = tokens.find(item => item.token === payload.token);
+            let resp = { valid: true, status: 'ACTIVE', token: payload.token };
+            if (!t) {
+              resp = { valid: false, status: 'NOT_FOUND', message: 'QR Code tidak terdaftar.' };
+            } else if (t.status === 'USED') {
+              resp = { valid: false, status: 'USED', message: `QR Code ini sudah pernah digunakan oleh ${t.used_by_name || 'pengguna lain'}.` };
+            } else if (t.status === 'EXPIRED') {
+              resp = { valid: false, status: 'EXPIRED', message: 'QR Code sudah kedaluwarsa.' };
+            }
+            mqttClient.publish(`smartqr/${adminSessionId}/check_resp/${payload.reqId}`, JSON.stringify(resp));
+          }
+        } catch (e) {
+          console.error('Error handling MQTT message:', e);
         }
       });
-    });
 
-    peer.on('error', (err) => {
-      console.warn('PeerJS fallback error:', err);
-    });
+      mqttClient.on('error', (err) => {
+        console.warn('MQTT connection error:', err);
+      });
+    } catch (e) {
+      console.warn('Failed to start MQTT client:', e);
+    }
   }
 
-  // BroadcastChannel listener (for testing on same browser / different tabs)
+  // BroadcastChannel listener (same-browser testing)
   if (broadcast) {
     broadcast.onmessage = (event) => {
       const data = event.data;
-      if (data && data.type === 'REQUEST_CHECK_TOKEN') {
-        const tokens = getStoredTokens();
-        const t = tokens.find(item => item.token === data.token);
-        broadcast.postMessage({ type: 'CHECK_TOKEN_RESPONSE', targetRequestId: data.requestId, tokenRecord: t });
-      } else if (data && data.type === 'SUBMIT_FROM_TAB') {
+      if (data && data.type === 'SUBMIT_FROM_TAB') {
         const result = processAttendanceSubmission(data.payload);
         broadcast.postMessage({ type: 'SUBMIT_RESPONSE_TAB', targetRequestId: data.requestId, result });
       }
     };
   }
 
-  // --- 6. SERVER FALLBACK CHECK (If running with Node.js backend) ---
+  // --- 6. SERVER FALLBACK (Local Node.js) ---
   async function checkForNodeServer() {
     try {
       const res = await fetch('/api/system/info');
       if (res.ok) {
         isServerMode = true;
-        syncBadgeText.textContent = 'Node Server WAL Sync';
-        // Connect to Socket.io if available
+        syncBadgeText.textContent = 'Node Server Sync';
         if (window.hasSocketIo && window.io) {
           const socket = io();
           socket.on('connect', () => {
@@ -391,7 +427,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       }
     } catch (e) {
-      // Static mode (GitHub Pages, etc.)
       isServerMode = false;
     }
   }
@@ -446,7 +481,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  // Manual QR Refresh Button
+  // Manual QR Refresh
   btnRefreshQr.addEventListener('click', async () => {
     qrOverlayLoading.classList.remove('hidden');
     if (isServerMode) {
@@ -457,12 +492,12 @@ document.addEventListener('DOMContentLoaded', () => {
         alert('Gagal merefresh QR server.');
       }
     } else {
-      await createNewActiveToken();
+      createNewActiveToken();
       showToast('QR Diperbarui', 'Token QR lama hangus dan token baru aktif.');
     }
   });
 
-  // Fullscreen Button
+  // Fullscreen
   btnFullscreen.addEventListener('click', () => {
     if (!document.fullscreenElement) {
       document.documentElement.requestFullscreen().catch(err => alert(`Fullscreen error: ${err.message}`));
@@ -471,7 +506,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // Tab Switching
+  // Tab Navigation
   function setActiveTab(tabName) {
     [tabBtnProjector, tabBtnAudit, tabBtnAttendance].forEach((btn) => {
       btn.className = 'tab-btn px-3.5 py-2 rounded-lg transition flex items-center gap-2 text-slate-400 hover:text-slate-200';
@@ -701,17 +736,15 @@ document.addEventListener('DOMContentLoaded', () => {
       .replace(/'/g, '&#039;');
   }
 
-  // --- INITIALIZE APPLICATION ---
+  // Initial Boot
   async function init() {
     await checkForNodeServer();
 
     if (!isServerMode) {
-      // In static / GitHub Pages mode:
-      initPeerJs();
+      initCloudMqtt();
       const tokens = getStoredTokens();
       const active = tokens.find(t => t.status === 'ACTIVE');
       if (active) {
-        currentActiveToken = active.token;
         renderActiveQrCode(active.token);
       } else {
         createNewActiveToken();

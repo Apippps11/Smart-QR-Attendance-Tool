@@ -8,11 +8,11 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Lucide Icons CDN -->
   <script src="https://unpkg.com/lucide@latest"></script>
-  <!-- Client-side QRCode Generator CDN -->
-  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
-  <!-- PeerJS for Direct Multi-Device Cloud Sync on GitHub Pages / Static Hosting -->
-  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
-  <!-- Optional Socket.io (if running via Node.js server) -->
+  <!-- Fast Reliable QR Code Library CDN -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <!-- Cloud Real-time MQTT WSS Client for Multi-Provider / Non-Wi-Fi Sync -->
+  <script src="https://unpkg.com/mqtt@5.10.4/dist/mqtt.min.js"></script>
+  <!-- Optional Socket.io (if running via local Node.js server) -->
   <script>window.hasSocketIo = false;</script>
   <script src="/socket.io/socket.io.js" onerror="window.hasSocketIo=false" onload="window.hasSocketIo=true"></script>
   <style>
@@ -63,7 +63,7 @@
             <h1 class="font-extrabold text-base sm:text-lg text-white tracking-tight">Smart QR Attendance</h1>
             <span id="syncBadge" class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
               <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>
-              <span id="syncBadgeText">Live Cloud Sync</span>
+              <span id="syncBadgeText">Cloud Sync (Beda Provider)</span>
             </span>
           </div>
           <p class="text-xs text-slate-400">1x Scan per Device &bull; Anti-Double QR &bull; Google Calendar Ready</p>
@@ -126,12 +126,12 @@
       <div class="bg-gradient-to-r from-slate-900/90 via-indigo-950/40 to-slate-900/90 border border-slate-800 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-4">
         <div class="flex items-center gap-3">
           <div class="p-2 rounded-xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
-            <i data-lucide="info" class="w-5 h-5"></i>
+            <i data-lucide="globe" class="w-5 h-5"></i>
           </div>
           <div>
-            <h2 class="text-sm font-bold text-white">Mode Layar Presensi / Proyektor</h2>
+            <h2 class="text-sm font-bold text-white">Layar Presensi Online (Bisa Beda Provider / Kuota HP)</h2>
             <p class="text-xs text-slate-400">
-              Tampilkan di layar/proyektor. Setiap QR hanya bisa dipakai 1x per perangkat, dan langsung berganti baru secara otomatis.
+              Pengguna bisa scan dari mana saja (Telkomsel, Indosat, XL, Wi-Fi lain). Setiap QR hangus setelah 1x pakai per device.
             </p>
           </div>
         </div>
@@ -163,11 +163,15 @@
             </div>
 
             <!-- QR Code Container -->
-            <div class="bg-white p-4 rounded-2xl shadow-2xl inline-block border-4 border-slate-800 mb-4 relative group">
+            <div class="bg-white p-4 rounded-2xl shadow-2xl inline-block border-4 border-slate-800 mb-4 relative group min-w-[280px] min-h-[280px]">
+              <!-- Primary Image QR Element -->
               <img id="qrImage" src="" alt="Dynamic Attendance QR" class="w-64 h-64 sm:w-72 sm:h-72 object-contain mx-auto block select-none">
-              <div id="qrOverlayLoading" class="absolute inset-0 bg-white/90 backdrop-blur-sm flex flex-col items-center justify-center rounded-xl hidden">
+              <!-- Secondary Canvas QR Element (fallback) -->
+              <div id="qrCanvasContainer" class="hidden w-64 h-64 sm:w-72 sm:h-72 flex items-center justify-center mx-auto"></div>
+              
+              <div id="qrOverlayLoading" class="absolute inset-0 bg-white/95 backdrop-blur-sm flex flex-col items-center justify-center rounded-xl transition-opacity">
                 <div class="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
-                <span class="text-xs font-bold text-slate-800 mt-2">Membuat QR Baru...</span>
+                <span class="text-xs font-bold text-slate-800 mt-2">Memuat QR Code...</span>
               </div>
             </div>
 
@@ -176,7 +180,7 @@
               <div class="flex items-center justify-center gap-2 text-xs text-slate-400">
                 <span>Kode Token Unik:</span>
                 <span id="activeTokenText" class="font-mono text-indigo-400 font-bold bg-slate-950 px-2 py-0.5 rounded border border-slate-800">
-                  QR-LOADING...
+                  QR-MEMUAT...
                 </span>
               </div>
               <p class="text-xs text-slate-500 font-medium">
@@ -187,7 +191,7 @@
             <!-- Access Link for Attendees -->
             <div class="mt-5 pt-4 border-t border-slate-800/80 text-left space-y-2">
               <span class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">
-                Link Presensi Peserta (Smartphone):
+                Link Presensi Peserta (Smartphone / Browser):
               </span>
               <div class="flex items-center justify-between bg-slate-950 p-2.5 rounded-xl border border-slate-800 text-xs">
                 <span id="mobileAccessUrl" class="font-mono text-emerald-400 font-semibold truncate select-all">memuat link...</span>
@@ -216,7 +220,7 @@
                 <div class="w-6 h-6 rounded-full bg-indigo-500/20 text-indigo-400 font-bold flex items-center justify-center shrink-0 text-xs">1</div>
                 <div>
                   <strong class="text-white">Scan QR Code</strong>
-                  <p class="text-slate-400 text-[11px] mt-0.5">Buka kamera smartphone dan arahkan ke QR Code di layar.</p>
+                  <p class="text-slate-400 text-[11px] mt-0.5">Bisa pakai kuota seluler (Telkomsel/XL/Indosat) atau Wi-Fi apa saja.</p>
                 </div>
               </div>
 
@@ -224,7 +228,7 @@
                 <div class="w-6 h-6 rounded-full bg-indigo-500/20 text-indigo-400 font-bold flex items-center justify-center shrink-0 text-xs">2</div>
                 <div>
                   <strong class="text-white">Isi Nama Lengkap</strong>
-                  <p class="text-slate-400 text-[11px] mt-0.5">Hari dan tanggal terisi otomatis, perangkat terkunci 1x absen.</p>
+                  <p class="text-slate-400 text-[11px] mt-0.5">Hari & tanggal otomatis. 1 perangkat hanya bisa absen 1 kali.</p>
                 </div>
               </div>
 
@@ -232,7 +236,7 @@
                 <div class="w-6 h-6 rounded-full bg-indigo-500/20 text-indigo-400 font-bold flex items-center justify-center shrink-0 text-xs">3</div>
                 <div>
                   <strong class="text-white">Konek ke Google Calendar</strong>
-                  <p class="text-slate-400 text-[11px] mt-0.5">Klik tombol 1-klik untuk menyimpan jadwal presensi ke kalender Anda.</p>
+                  <p class="text-slate-400 text-[11px] mt-0.5">Klik 1-klik untuk simpan jadwal kehadiran ke Google Calendar.</p>
                 </div>
               </div>
             </div>
@@ -431,7 +435,7 @@
   <footer class="border-t border-slate-800/80 bg-slate-950 py-3.5 text-center text-xs text-slate-500">
     <div class="max-w-7xl mx-auto px-4 flex flex-wrap items-center justify-between gap-2">
       <span>Smart QR Attendance Tool &bull; Realtime Single-Use Token Architecture</span>
-      <span class="text-slate-400">Works on GitHub Pages &bull; Vercel &bull; Local Node.js</span>
+      <span class="text-slate-400">Online Hosting: GitHub Pages &bull; Cloud MQTT WSS Sync</span>
     </div>
   </footer>
 

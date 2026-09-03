@@ -1,14 +1,16 @@
 /**
  * Logika Halaman Presensi Peserta (attend.js)
- * Mendukung Dual-Engine:
- * 1. Cloud PeerJS / BroadcastChannel / LocalStorage (GitHub Pages / Static Hosting)
- * 2. Express Server API (Node.js backend)
+ * Mendukung:
+ * 1. Cloud MQTT WSS over SSL (Bisa beda provider seluler / beda Wi-Fi / kuota 4G)
+ * 2. Express Server API (Localhost / VPS Node.js)
+ * 3. BroadcastChannel (Same-device local testing)
+ * 4. Integrasi Google Calendar 1-Klik & Unduh .ics
  */
 
 document.addEventListener('DOMContentLoaded', async () => {
   const urlParams = new URLSearchParams(window.location.search);
   const token = urlParams.get('token');
-  const adminPeerId = urlParams.get('admin');
+  const sessionId = urlParams.get('session');
 
   const checkingSection = document.getElementById('checkingSection');
   const scannerSection = document.getElementById('scannerSection');
@@ -34,25 +36,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   const btnGoogleCalendar = document.getElementById('btnGoogleCalendar');
   const btnDownloadIcs = document.getElementById('btnDownloadIcs');
 
-  const STORAGE_QR_TOKENS = 'sqr_qr_tokens';
-  const STORAGE_ATTENDANCES = 'sqr_attendances';
-
-  function getStoredTokens() {
-    try {
-      return JSON.parse(localStorage.getItem(STORAGE_QR_TOKENS)) || [];
-    } catch (e) {
-      return [];
-    }
-  }
-
-  function getStoredAttendances() {
-    try {
-      return JSON.parse(localStorage.getItem(STORAGE_ATTENDANCES)) || [];
-    } catch (e) {
-      return [];
-    }
-  }
-
   function getIndonesianDayName(dateObj) {
     const days = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
     return days[dateObj.getDay()];
@@ -65,14 +48,30 @@ document.addEventListener('DOMContentLoaded', async () => {
     return `${year}-${month}-${day}`;
   }
 
-  // Device Fingerprint
+  // Generate Device Fingerprint
   const { deviceId, deviceInfo } = window.DeviceFingerprint.getDeviceInfo();
   if (deviceLabel) {
     deviceLabel.textContent = deviceInfo;
   }
 
   const broadcast = ('BroadcastChannel' in window) ? new BroadcastChannel('smart_qr_channel') : null;
-  let peerConnection = null;
+  let mqttClient = null;
+
+  // Inisialisasi Cloud MQTT Client
+  if (typeof mqtt !== 'undefined' && sessionId) {
+    const brokerUrl = 'wss://broker.emqx.io:8084/mqtt';
+    const clientId = 'sqr_user_' + Math.random().toString(16).substring(2, 10);
+    try {
+      mqttClient = mqtt.connect(brokerUrl, {
+        clientId,
+        clean: true,
+        connectTimeout: 5000,
+        reconnectPeriod: 3000
+      });
+    } catch (e) {
+      console.warn('MQTT init failed:', e);
+    }
+  }
 
   // JIKA TIDAK ADA TOKEN -> Tampilkan Scanner Kamera
   if (!token) {
@@ -93,87 +92,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     return;
   }
 
-  // JIKA ADA TOKEN -> Lakukan Verifikasi Awal
+  // JIKA ADA TOKEN -> Set UI Token & Tampilkan Form
   badgeToken.textContent = token;
 
-  // Setup PeerJS connection to Admin if adminPeerId exists (for multi-device on GitHub Pages)
-  if (adminPeerId && typeof Peer !== 'undefined') {
-    try {
-      const clientPeer = new Peer();
-      clientPeer.on('open', () => {
-        peerConnection = clientPeer.connect(adminPeerId);
-        peerConnection.on('open', () => {
-          console.log('Connected directly to Admin via Cloud PeerJS');
-        });
-      });
-    } catch (e) {
-      console.warn('PeerJS client error:', e);
-    }
-  }
-
-  async function checkTokenValidity() {
-    // 1. Coba ke backend Node.js jika ada
-    try {
-      const res = await fetch(`/api/qr/check/${encodeURIComponent(token)}`);
-      if (res.ok) {
-        const data = await res.json();
-        return { valid: true, status: data.status };
-      } else if (res.status === 409 || res.status === 410 || res.status === 404) {
-        const data = await res.json();
-        return { valid: false, status: data.status, message: data.message };
-      }
-    } catch (e) {
-      // Backend not running -> Static / GitHub Pages mode
-    }
-
-    // 2. Mode Static / LocalStorage
-    const tokens = getStoredTokens();
-    const target = tokens.find(t => t.token === token);
-    if (!target) {
-      // Jika baru discan dari URL yang valid, anggap aktif
-      return { valid: true, status: 'ACTIVE' };
-    }
-    if (target.status === 'USED') {
-      return {
-        valid: false,
-        status: 'USED',
-        message: `QR Code ini sudah pernah digunakan oleh ${target.used_by_name || 'pengguna lain'}. Setiap QR Code hanya dapat dipakai 1 kali!`
-      };
-    }
-    if (target.status === 'EXPIRED') {
-      return {
-        valid: false,
-        status: 'EXPIRED',
-        message: 'QR Code sudah kedaluwarsa karena admin telah me-refresh kode QR.'
-      };
-    }
-
-    return { valid: true, status: 'ACTIVE' };
-  }
-
-  const checkResult = await checkTokenValidity();
-  checkingSection.classList.add('hidden');
-
-  if (!checkResult.valid) {
-    errorSection.classList.remove('hidden');
-    if (checkResult.status === 'USED') {
-      errorTitle.textContent = '❌ QR Code Sudah Digunakan!';
-      errorMessage.textContent = checkResult.message || 'QR Code ini sudah pernah digunakan. Silakan minta QR code baru di layar admin.';
-    } else if (checkResult.status === 'EXPIRED') {
-      errorTitle.textContent = '⏱️ QR Code Kedaluwarsa';
-      errorMessage.textContent = checkResult.message || 'QR Code ini sudah kedaluwarsa. Silakan scan QR code yang baru.';
-    } else {
-      errorTitle.textContent = '⚠️ QR Code Tidak Valid';
-      errorMessage.textContent = checkResult.message || 'Token QR tidak terdaftar.';
-    }
-    lucide.createIcons();
-    return;
-  }
-
-  // TOKEN AKTIF -> Tampilkan Form Presensi
-  formSection.classList.remove('hidden');
-  lucide.createIcons();
-
+  // Setup Tanggal & Hari Default
   const today = new Date();
   inputDate.value = getLocalDateString(today);
   inputDay.value = getIndonesianDayName(today);
@@ -186,9 +108,61 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
+  // Verifikasi cepat status token
+  async function performQuickCheck() {
+    // 1. Cek via backend jika ada
+    try {
+      const res = await fetch(`/api/qr/check/${encodeURIComponent(token)}`);
+      if (res.ok) {
+        return { valid: true };
+      } else if (res.status === 409 || res.status === 410 || res.status === 404) {
+        const d = await res.json();
+        return { valid: false, status: d.status, message: d.message };
+      }
+    } catch (e) {
+      // Backend tidak ada (Mode GitHub Pages)
+    }
+
+    // 2. Cek via LocalStorage jika satu browser
+    try {
+      const tokens = JSON.parse(localStorage.getItem('sqr_qr_tokens')) || [];
+      const target = tokens.find(t => t.token === token);
+      if (target && target.status === 'USED') {
+        return { valid: false, status: 'USED', message: `QR Code ini sudah pernah digunakan oleh ${target.used_by_name || 'pengguna lain'}.` };
+      }
+      if (target && target.status === 'EXPIRED') {
+        return { valid: false, status: 'EXPIRED', message: 'QR Code ini sudah kedaluwarsa.' };
+      }
+    } catch (e) {}
+
+    return { valid: true };
+  }
+
+  const check = await performQuickCheck();
+  checkingSection.classList.add('hidden');
+
+  if (!check.valid) {
+    errorSection.classList.remove('hidden');
+    if (check.status === 'USED') {
+      errorTitle.textContent = '❌ QR Code Sudah Digunakan!';
+      errorMessage.textContent = check.message || 'QR Code ini sudah pernah digunakan. Setiap QR Code hanya bisa dipakai 1 kali!';
+    } else if (check.status === 'EXPIRED') {
+      errorTitle.textContent = '⏱️ QR Code Kedaluwarsa';
+      errorMessage.textContent = check.message || 'QR Code ini sudah kedaluwarsa. Silakan scan QR code yang baru.';
+    } else {
+      errorTitle.textContent = '⚠️ QR Code Tidak Valid';
+      errorMessage.textContent = check.message || 'Token QR tidak terdaftar.';
+    }
+    lucide.createIcons();
+    return;
+  }
+
+  // Token valid -> tampilkan form
+  formSection.classList.remove('hidden');
+  lucide.createIcons();
   setTimeout(() => inputName.focus(), 200);
 
-  // SUBMIT PRESENSI
+  // --- SUBMIT PRESENSI ---
   attendanceForm.addEventListener('submit', async (e) => {
     e.preventDefault();
 
@@ -210,6 +184,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       <span>Memverifikasi Presensi...</span>
     `;
 
+    const reqId = 'req_' + Math.random().toString(36).substring(2, 10);
     const payload = {
       token,
       name,
@@ -217,10 +192,11 @@ document.addEventListener('DOMContentLoaded', async () => {
       day,
       time,
       deviceId,
-      deviceInfo
+      deviceInfo,
+      reqId
     };
 
-    // 1. Jika ada server Node.js aktif
+    // 1. Coba kirim via server Node.js jika tersedia
     try {
       const response = await fetch('/api/attendance/submit', {
         method: 'POST',
@@ -244,80 +220,113 @@ document.addEventListener('DOMContentLoaded', async () => {
           return;
         }
 
-        // Berhasil via Server!
         renderSuccessScreen(result.attendance);
         return;
       }
     } catch (err) {
-      // Backend not available -> fallback to Client-Side / PeerJS Engine
+      // Server Node.js tidak ada -> Gunakan Cloud MQTT
     }
 
-    // 2. Kirim via PeerJS (jika terkoneksi langsung ke admin laptop/layar)
-    if (peerConnection && peerConnection.open) {
-      peerConnection.send({ action: 'SUBMIT_ATTENDANCE', payload });
-      peerConnection.once('data', (res) => {
-        if (res && res.action === 'ATTENDANCE_RESULT') {
-          if (!res.result.success) {
-            btnSubmit.disabled = false;
-            btnSubmit.innerHTML = originalBtnText;
-            alert('Presensi Ditolak:\n\n' + res.result.error);
-            return;
-          }
-          renderSuccessScreen(res.result.attendance);
+    // 2. Kirim via Cloud Real-time MQTT (Beda Provider / Beda Wi-Fi)
+    if (mqttClient && sessionId) {
+      const submitTopic = `smartqr/${sessionId}/submit`;
+      const respTopic = `smartqr/${sessionId}/resp/${reqId}`;
+
+      let answered = false;
+
+      mqttClient.subscribe(respTopic, (err) => {
+        if (!err) {
+          mqttClient.publish(submitTopic, JSON.stringify(payload));
         }
       });
+
+      mqttClient.on('message', (topic, message) => {
+        if (topic === respTopic && !answered) {
+          answered = true;
+          try {
+            const res = JSON.parse(message.toString());
+            if (!res.success) {
+              btnSubmit.disabled = false;
+              btnSubmit.innerHTML = originalBtnText;
+              alert('Presensi Ditolak:\n\n' + res.error);
+              return;
+            }
+            renderSuccessScreen(res.attendance);
+          } catch (e) {
+            btnSubmit.disabled = false;
+            btnSubmit.innerHTML = originalBtnText;
+            alert('Gagal memproses respon presensi.');
+          }
+        }
+      });
+
+      // Timeout safety: jika dalam 8 detik tidak ada balasan dari admin
+      setTimeout(() => {
+        if (!answered) {
+          // Coba fallback ke Local / Same-Device Storage
+          attemptLocalFallback(payload, originalBtnText);
+        }
+      }, 7000);
       return;
     }
 
-    // 3. Fallback: Local / Same-Device Storage Engine
-    const attendances = getStoredAttendances();
-    const existingDevice = attendances.find(a => a.device_id === deviceId && a.date === date);
-    if (existingDevice) {
-      btnSubmit.disabled = false;
-      btnSubmit.innerHTML = originalBtnText;
-      alert(`Presensi Ditolak:\n\nPerangkat ini sudah tercatat melakukan absensi hari ini atas nama "${existingDevice.name}". Setiap perangkat hanya bisa absen 1 kali per hari!`);
-      return;
-    }
-
-    const tokens = getStoredTokens();
-    const targetToken = tokens.find(t => t.token === token);
-    if (targetToken && targetToken.status === 'USED') {
-      btnSubmit.disabled = false;
-      btnSubmit.innerHTML = originalBtnText;
-      alert('Presensi Ditolak:\n\nQR Code ini sudah pernah digunakan oleh pengguna lain!');
-      return;
-    }
-
-    // Simpan di LocalStorage
-    if (targetToken) {
-      targetToken.status = 'USED';
-      targetToken.used_by_name = name;
-      targetToken.used_at = new Date().toISOString();
-      targetToken.device_id = deviceId;
-      localStorage.setItem(STORAGE_QR_TOKENS, JSON.stringify(tokens));
-    }
-
-    const localRecord = {
-      id: Date.now(),
-      token,
-      name,
-      date,
-      day,
-      time,
-      device_id: deviceId,
-      device_info: deviceInfo,
-      created_at: new Date().toISOString()
-    };
-    attendances.unshift(localRecord);
-    localStorage.setItem(STORAGE_ATTENDANCES, JSON.stringify(attendances));
-
-    // Kirim sinyal broadcast ke tab admin yang terbuka
-    if (broadcast) {
-      broadcast.postMessage({ type: 'SUBMIT_FROM_TAB', payload });
-    }
-
-    renderSuccessScreen(localRecord);
+    // 3. Fallback: Same-Device Local Engine
+    attemptLocalFallback(payload, originalBtnText);
   });
+
+  function attemptLocalFallback(payload, originalBtnText) {
+    try {
+      const attendances = JSON.parse(localStorage.getItem('sqr_attendances')) || [];
+      const existing = attendances.find(a => a.device_id === deviceId && a.date === payload.date);
+      if (existing) {
+        btnSubmit.disabled = false;
+        btnSubmit.innerHTML = originalBtnText;
+        alert(`Presensi Ditolak:\n\nPerangkat ini sudah tercatat melakukan absensi hari ini atas nama "${existing.name}". 1 perangkat hanya bisa absen 1 kali per hari!`);
+        return;
+      }
+
+      const tokens = JSON.parse(localStorage.getItem('sqr_qr_tokens')) || [];
+      const targetToken = tokens.find(t => t.token === payload.token);
+      if (targetToken && targetToken.status === 'USED') {
+        btnSubmit.disabled = false;
+        btnSubmit.innerHTML = originalBtnText;
+        alert('Presensi Ditolak:\n\nQR Code ini sudah pernah digunakan oleh pengguna lain!');
+        return;
+      }
+
+      if (targetToken) {
+        targetToken.status = 'USED';
+        targetToken.used_by_name = payload.name;
+        targetToken.used_at = new Date().toISOString();
+        targetToken.device_id = deviceId;
+        localStorage.setItem('sqr_qr_tokens', JSON.stringify(tokens));
+      }
+
+      const record = {
+        id: Date.now(),
+        token: payload.token,
+        name: payload.name,
+        date: payload.date,
+        day: payload.day,
+        time: payload.time,
+        device_id: deviceId,
+        device_info: deviceInfo,
+        created_at: new Date().toISOString()
+      };
+      attendances.unshift(record);
+      localStorage.setItem('sqr_attendances', JSON.stringify(attendances));
+
+      if (broadcast) {
+        broadcast.postMessage({ type: 'SUBMIT_FROM_TAB', payload });
+      }
+
+      renderSuccessScreen(record);
+    } catch (e) {
+      btnSubmit.disabled = false;
+      btnSubmit.innerHTML = originalBtnText;
+      alert('Gagal menghubungi layar admin. Pastikan layar admin sedang terbuka dan aktif.');
+    }
+  }
 
   function renderSuccessScreen(attendance) {
     formSection.classList.add('hidden');
@@ -358,7 +367,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const description = `Bukti Kehadiran Resmi Smart QR Attendance Tool.\n\nNama: ${name}\nHari: ${day}\nTanggal: ${date}\nJam Masuk: ${time} WIB\nKode Token: ${token}\nStatus: Hadir Terverifikasi (1x Device Lock)`;
     const location = `Sistem Presensi Smart QR`;
 
-    // Direct Google Calendar Intent URL
+    // Direct Google Calendar Web Intent URL
     const gcalUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(title)}&dates=${startFormatted}/${endFormatted}&details=${encodeURIComponent(description)}&location=${encodeURIComponent(location)}`;
     btnGoogleCalendar.href = gcalUrl;
 
