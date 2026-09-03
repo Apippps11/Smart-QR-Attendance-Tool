@@ -224,8 +224,18 @@ app.post('/api/attendance/submit', async (req, res) => {
       });
     }
 
-    // 2. Check Device Lock (1 attendance per device per day)
-    const targetDate = date || new Date().toISOString().split('T')[0];
+    // 2. Regional Time Lock Validation (Must be today's date)
+    const localNow = new Date();
+    const todayRegional = `${localNow.getFullYear()}-${String(localNow.getMonth() + 1).padStart(2, '0')}-${String(localNow.getDate()).padStart(2, '0')}`;
+    if (date && date !== todayRegional) {
+      return res.status(400).json({
+        success: false,
+        error: `Kunci Waktu Regional Aktif: Presensi hanya dapat dilakukan pada tanggal hari ini (${todayRegional}). Anda tidak dapat melakukan presensi untuk tanggal sebelum atau sesudah hari ini!`
+      });
+    }
+
+    // 3. Check Device Lock (1 attendance per device per day)
+    const targetDate = todayRegional;
     const existingDeviceRecord = AttendanceModel.hasDeviceAttended(deviceId, targetDate);
     if (existingDeviceRecord) {
       return res.status(403).json({

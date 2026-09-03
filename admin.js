@@ -253,9 +253,19 @@ document.addEventListener('DOMContentLoaded', () => {
       };
     }
 
+    // Regional Time Lock Validation (Must be today)
+    const localNow = new Date();
+    const todayRegional = `${localNow.getFullYear()}-${String(localNow.getMonth() + 1).padStart(2, '0')}-${String(localNow.getDate()).padStart(2, '0')}`;
+    if (date && date !== todayRegional) {
+      return {
+        success: false,
+        error: `Kunci Waktu Regional Aktif: Presensi hanya berlaku untuk tanggal hari ini (${todayRegional}). Anda tidak dapat melakukan presensi untuk tanggal sebelum atau sesudah!`
+      };
+    }
+
     // Check Device Lock (1 attendance per device per day)
     const attendances = getStoredAttendances();
-    const targetDate = date || new Date().toISOString().split('T')[0];
+    const targetDate = todayRegional;
     const existingDeviceRecord = attendances.find(a => a.device_id === deviceId && a.date === targetDate);
 
     if (existingDeviceRecord) {

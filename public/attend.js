@@ -95,18 +95,15 @@ document.addEventListener('DOMContentLoaded', async () => {
   // JIKA ADA TOKEN -> Set UI Token & Tampilkan Form
   badgeToken.textContent = token;
 
-  // Setup Tanggal & Hari Default
+  // Setup Tanggal & Hari (Regional Time Lock - Strictly Today Only)
   const today = new Date();
-  inputDate.value = getLocalDateString(today);
+  const todayDateString = getLocalDateString(today);
+  inputDate.value = todayDateString;
+  inputDate.min = todayDateString;
+  inputDate.max = todayDateString;
+  inputDate.readOnly = true;
   inputDay.value = getIndonesianDayName(today);
-
-  inputDate.addEventListener('change', () => {
-    if (inputDate.value) {
-      const parts = inputDate.value.split('-');
-      const selectedDate = new Date(parts[0], parts[1] - 1, parts[2]);
-      inputDay.value = getIndonesianDayName(selectedDate);
-    }
-  });
+  inputDay.readOnly = true;
 
   // Verifikasi cepat status token
   async function performQuickCheck() {
@@ -174,6 +171,13 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     if (!name) {
       alert('Mohon masukkan nama lengkap Anda.');
+      return;
+    }
+
+    // REGIONAL TIME LOCK VALIDATION
+    const expectedToday = getLocalDateString(new Date());
+    if (date !== expectedToday) {
+      alert(`Kunci Waktu Regional Aktif:\n\nPresensi hanya dapat dilakukan pada tanggal hari ini (${expectedToday}). Anda tidak dapat melakukan presensi untuk hari sebelum atau sesudah!`);
       return;
     }
 
