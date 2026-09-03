@@ -34,6 +34,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const cameraScanModal = document.getElementById('cameraScanModal');
   const btnCloseCamera = document.getElementById('btnCloseCamera');
   const btnUploadFromScanner = document.getElementById('btnUploadFromScanner');
+  const btnUploadFromScannerAlt = document.getElementById('btnUploadFromScannerAlt');
   const cameraViewContainer = document.getElementById('cameraViewContainer');
   const scanStatusBadge = document.getElementById('scanStatusBadge');
   const scanStatusText = document.getElementById('scanStatusText');
@@ -317,9 +318,15 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // Tombol Buka File Foto dari dalam Scanner Modal
+  // Tombol Buka File Foto dari dalam Scanner Modal (Border Kamera)
   if (btnUploadFromScanner) {
     btnUploadFromScanner.addEventListener('click', () => {
+      inputQrFile.click();
+    });
+  }
+
+  if (btnUploadFromScannerAlt) {
+    btnUploadFromScannerAlt.addEventListener('click', () => {
       inputQrFile.click();
     });
   }
