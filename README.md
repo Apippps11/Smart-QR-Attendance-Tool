@@ -4,6 +4,12 @@ Sistem presensi (absen) modern berbasis web dengan teknologi **Dynamic Single-Us
 
 ---
 
+## 🌐 Live Web Hosting (Langsung Akses Online)
+Website ini sudah siap dan dapat langsung diakses secara online melalui **GitHub Pages**:
+🔗 **[https://apippps11.github.io/Smart-QR-Attendance-Tool/](https://apippps11.github.io/Smart-QR-Attendance-Tool/)**
+
+---
+
 ## 🌟 Fitur Utama
 
 1. **QR Code Dinamis 1x Pakai (Single-Use Token)**
