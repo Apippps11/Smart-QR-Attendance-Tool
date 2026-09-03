@@ -14,6 +14,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const gateModal = document.getElementById('gateModal');
   const btnOpenAdminLogin = document.getElementById('btnOpenAdminLogin');
   const btnOpenScan = document.getElementById('btnOpenScan');
+  const btnOpenUpload = document.getElementById('btnOpenUpload');
+  const inputQrFile = document.getElementById('inputQrFile');
 
   const adminLoginModal = document.getElementById('adminLoginModal');
   const formAdminLogin = document.getElementById('formAdminLogin');
@@ -31,6 +33,12 @@ document.addEventListener('DOMContentLoaded', () => {
   // --- SCANNER MODAL ELEMENTS ---
   const cameraScanModal = document.getElementById('cameraScanModal');
   const btnCloseCamera = document.getElementById('btnCloseCamera');
+  const btnUploadFromScanner = document.getElementById('btnUploadFromScanner');
+  const cameraViewContainer = document.getElementById('cameraViewContainer');
+  const scanStatusBadge = document.getElementById('scanStatusBadge');
+  const scanStatusText = document.getElementById('scanStatusText');
+  const scannerStabilizeOverlay = document.getElementById('scannerStabilizeOverlay');
+  const stabilizedTokenText = document.getElementById('stabilizedTokenText');
 
   // --- INLINE ATTENDANCE FORM ELEMENTS ---
   const attendInlineModal = document.getElementById('attendInlineModal');
@@ -262,12 +270,100 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // --- 2. CAMERA SCANNER FOR "ISI ABSENSI" ---
+  // --- 2. CAMERA SCANNER & PHOTO UPLOAD FOR "ISI ABSENSI" ---
+  let isStabilizing = false;
+
+  function extractQrData(text) {
+    if (!text || typeof text !== 'string') return null;
+    let token = null;
+    let session = null;
+
+    // 1. Cek apakah format URL
+    if (text.startsWith('http://') || text.startsWith('https://')) {
+      try {
+        const urlObj = new URL(text);
+        token = urlObj.searchParams.get('token');
+        session = urlObj.searchParams.get('session');
+      } catch (e) {}
+    }
+
+    // 2. Jika belum ketemu, cari pola QR-[A-Z0-9]{4,10}
+    if (!token) {
+      const match = text.match(/(QR-[A-Z0-9]{4,10})/i);
+      if (match) {
+        token = match[1].toUpperCase();
+      }
+    }
+
+    // Hanya terima jika memiliki token QR yang valid
+    if (!token || !token.startsWith('QR-')) {
+      return null;
+    }
+
+    return { token: token.toUpperCase(), session: session || null };
+  }
+
+  // Tombol Buka Scanner Kamera
   btnOpenScan.addEventListener('click', () => {
     gateModal.classList.add('hidden');
     cameraScanModal.classList.remove('hidden');
     startInAppCameraScanner();
   });
+
+  // Tombol Buka File Foto dari Gate Modal
+  if (btnOpenUpload) {
+    btnOpenUpload.addEventListener('click', () => {
+      inputQrFile.click();
+    });
+  }
+
+  // Tombol Buka File Foto dari dalam Scanner Modal
+  if (btnUploadFromScanner) {
+    btnUploadFromScanner.addEventListener('click', () => {
+      inputQrFile.click();
+    });
+  }
+
+  // Handler Upload Foto dari Galeri / Storage / Drive
+  if (inputQrFile) {
+    inputQrFile.addEventListener('change', async (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+
+      if (!html5QrScanner) {
+        html5QrScanner = new Html5Qrcode("qrScannerView");
+      }
+
+      scanStatusText.textContent = 'Menganalisis QR dari gambar...';
+
+      try {
+        const decodedText = await html5QrScanner.scanFile(file, false);
+        const qrData = extractQrData(decodedText);
+
+        if (!qrData) {
+          alert('Gambar terdeteksi, namun bukan merupakan QR Code Presensi yang sah. Pastikan foto memuat QR code presensi.');
+          scanStatusText.textContent = 'Arahkan kamera ke QR code proyektor...';
+          return;
+        }
+
+        // QR Valid dari foto!
+        playSuccessChime();
+        stopInAppCameraScanner();
+        cameraScanModal.classList.add('hidden');
+        gateModal.classList.add('hidden');
+
+        activeScannedToken = qrData.token;
+        activeScannedSession = qrData.session;
+        openInlineAttendanceModal(qrData.token);
+      } catch (err) {
+        console.error('Scan file error:', err);
+        alert('Gagal mendeteksi QR Code dari gambar yang dipilih.\n\nTips:\n- Pastikan foto memiliki pencahayaan cukup\n- Pastikan QR Code tidak terpotong atau blur\n- Coba ambil foto lebih dekat ke layar QR');
+        scanStatusText.textContent = 'Arahkan kamera ke QR code proyektor...';
+      } finally {
+        inputQrFile.value = '';
+      }
+    });
+  }
 
   btnCloseCamera.addEventListener('click', () => {
     stopInAppCameraScanner();
@@ -276,6 +372,11 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   function startInAppCameraScanner() {
+    isStabilizing = false;
+    scannerStabilizeOverlay.classList.add('hidden');
+    cameraViewContainer.classList.remove('border-emerald-500', 'ring-4', 'ring-emerald-500/30');
+    scanStatusText.textContent = 'Arahkan kamera ke QR code proyektor...';
+
     if (typeof Html5Qrcode === 'undefined') {
       alert('Library scanner kamera sedang dimuat, silakan coba lagi sesaat lagi.');
       return;
@@ -286,8 +387,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const config = {
-      fps: 15,
-      qrbox: { width: 250, height: 250 },
+      fps: 12,
+      qrbox: { width: 240, height: 240 },
       aspectRatio: 1.0
     };
 
@@ -295,12 +396,10 @@ document.addEventListener('DOMContentLoaded', () => {
       { facingMode: "environment" },
       config,
       onQrCodeSuccess,
-      (errorMessage) => {
-        // scan loop failure (no QR in frame) - silent
-      }
+      () => {} // silent on frame without QR
     ).catch(err => {
       console.error('Camera error:', err);
-      alert('Gagal mengakses kamera!\n\nPastikan Anda mengizinkan izin kamera pada browser Anda.');
+      alert('Gagal mengakses kamera!\n\nPastikan Anda mengizinkan izin akses kamera pada browser Anda.');
       stopInAppCameraScanner();
       cameraScanModal.classList.add('hidden');
       gateModal.classList.remove('hidden');
@@ -308,31 +407,49 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function stopInAppCameraScanner() {
+    isStabilizing = false;
     if (html5QrScanner && html5QrScanner.isScanning) {
       html5QrScanner.stop().catch(() => {});
     }
   }
 
   async function onQrCodeSuccess(decodedText) {
+    if (isStabilizing) return;
+
+    // Filter ketat: Pastikan benar-benar format QR Presensi kita (tidak langsung comot barcode lain)
+    const qrData = extractQrData(decodedText);
+    if (!qrData) {
+      // Abaikan barcode acak yang belum pas
+      return;
+    }
+
+    // Kunci stabilisasi: Berikan feedback visual & waktu jeda santai agar tidak kaget
+    isStabilizing = true;
     playSuccessChime();
-    stopInAppCameraScanner();
-    cameraScanModal.classList.add('hidden');
 
-    let token = decodedText;
-    let session = null;
+    // Visual feedback
+    cameraViewContainer.classList.add('border-emerald-500', 'ring-4', 'ring-emerald-500/30');
+    stabilizedTokenText.textContent = qrData.token;
+    scannerStabilizeOverlay.classList.remove('hidden');
+    scanStatusText.textContent = '✅ QR Divalidasi: ' + qrData.token;
 
+    // Pause scanner kamera
     try {
-      if (decodedText.startsWith('http://') || decodedText.startsWith('https://')) {
-        const parsedUrl = new URL(decodedText);
-        token = parsedUrl.searchParams.get('token') || decodedText;
-        session = parsedUrl.searchParams.get('session') || null;
+      if (html5QrScanner && html5QrScanner.isScanning) {
+        html5QrScanner.pause(true);
       }
     } catch (e) {}
 
-    activeScannedToken = token;
-    activeScannedSession = session;
+    // Delay 600ms agar user merasa tenang dan yakin QR terdeteksi penuh
+    await new Promise(res => setTimeout(res, 650));
 
-    openInlineAttendanceModal(token);
+    stopInAppCameraScanner();
+    cameraScanModal.classList.add('hidden');
+
+    activeScannedToken = qrData.token;
+    activeScannedSession = qrData.session;
+
+    openInlineAttendanceModal(qrData.token);
   }
 
   function openInlineAttendanceModal(token) {
@@ -367,7 +484,7 @@ document.addEventListener('DOMContentLoaded', () => {
     gateModal.classList.remove('hidden');
   });
 
-  // Handle Form Presensi Submit
+  // Handle Form Presensi Submit (Dengan Dukungan Cloud MQTT Lintas Perangkat / Beda Wi-Fi)
   inlineAttendForm.addEventListener('submit', async (e) => {
     e.preventDefault();
 
@@ -382,7 +499,7 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    let devId = 'unknown_device';
+    let devId = 'device_client';
     let devInfo = 'Web Client';
     if (window.DeviceFingerprint) {
       const dev = window.DeviceFingerprint.getDeviceInfo();
@@ -394,9 +511,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const origText = btnSubmitInline.innerHTML;
     btnSubmitInline.innerHTML = `
       <div class="inline-block animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full mr-2"></div>
-      <span>Memverifikasi...</span>
+      <span>Memverifikasi Presensi...</span>
     `;
 
+    const reqId = 'req_' + Math.random().toString(36).substring(2, 9);
     const payload = {
       token: activeScannedToken,
       name,
@@ -404,7 +522,8 @@ document.addEventListener('DOMContentLoaded', () => {
       day: dayStr,
       time: timeStr,
       deviceId: devId,
-      deviceInfo: devInfo
+      deviceInfo: devInfo,
+      reqId
     };
 
     // 1. Jika mode server Node.js lokal
@@ -427,7 +546,74 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     } catch (e) {}
 
-    // 2. Jika local engine / single browser
+    // 2. Jika ada session ID (Scan dari HP peserta ke proyektor laptop via Cloud MQTT)
+    if (activeScannedSession && typeof mqtt !== 'undefined') {
+      const brokerUrl = 'wss://broker.emqx.io:8084/mqtt';
+      const userClientId = 'sqr_usr_' + Math.random().toString(16).substring(2, 8);
+      let userMqtt = null;
+      let handled = false;
+
+      try {
+        userMqtt = mqtt.connect(brokerUrl, {
+          clientId: userClientId,
+          clean: true,
+          connectTimeout: 5000,
+          reconnectPeriod: 2000
+        });
+
+        const submitTopic = `smartqr/${activeScannedSession}/submit`;
+        const respTopic = `smartqr/${activeScannedSession}/resp/${reqId}`;
+
+        userMqtt.on('connect', () => {
+          userMqtt.subscribe(respTopic, () => {
+            userMqtt.publish(submitTopic, JSON.stringify(payload));
+          });
+        });
+
+        userMqtt.on('message', (topic, message) => {
+          if (topic === respTopic && !handled) {
+            handled = true;
+            btnSubmitInline.disabled = false;
+            btnSubmitInline.innerHTML = origText;
+            try {
+              const res = JSON.parse(message.toString());
+              if (!res.success) {
+                alert('Presensi Ditolak:\n\n' + res.error);
+                return;
+              }
+              renderInlineSuccess(res.attendance);
+            } catch (err) {
+              alert('Gagal memproses jawaban dari admin.');
+            } finally {
+              try { userMqtt.end(); } catch(e) {}
+            }
+          }
+        });
+
+        // Timeout 7 detik jika admin belum merespon
+        setTimeout(() => {
+          if (!handled) {
+            handled = true;
+            try { userMqtt.end(); } catch(e) {}
+            // Fallback ke local engine
+            const fallbackResult = processAttendanceSubmission(payload);
+            btnSubmitInline.disabled = false;
+            btnSubmitInline.innerHTML = origText;
+            if (!fallbackResult.success) {
+              alert('Presensi Ditolak:\n\n' + fallbackResult.error);
+              return;
+            }
+            renderInlineSuccess(fallbackResult.attendance);
+          }
+        }, 6500);
+
+        return;
+      } catch (err) {
+        console.warn('MQTT user submit failed, fallback to local:', err);
+      }
+    }
+
+    // 3. Fallback: Local Engine (Jika buka di satu browser / device yang sama)
     const result = processAttendanceSubmission(payload);
     btnSubmitInline.disabled = false;
     btnSubmitInline.innerHTML = origText;

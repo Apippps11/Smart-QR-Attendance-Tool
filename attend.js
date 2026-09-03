@@ -73,10 +73,40 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
-  // JIKA TIDAK ADA TOKEN -> Tampilkan Scanner Kamera
+  // JIKA TIDAK ADA TOKEN -> Tampilkan Scanner Kamera & Opsi Foto
   if (!token) {
     checkingSection.classList.add('hidden');
     scannerSection.classList.remove('hidden');
+
+    const inputAttendPhoto = document.getElementById('inputAttendPhoto');
+    const btnUploadAttendPhoto = document.getElementById('btnUploadAttendPhoto');
+
+    if (btnUploadAttendPhoto && inputAttendPhoto) {
+      btnUploadAttendPhoto.addEventListener('click', () => {
+        inputAttendPhoto.click();
+      });
+
+      inputAttendPhoto.addEventListener('change', async (e) => {
+        const file = e.target.files && e.target.files[0];
+        if (!file) return;
+
+        if (typeof Html5Qrcode !== 'undefined') {
+          const tempScanner = new Html5Qrcode("qr-reader");
+          try {
+            const decodedText = await tempScanner.scanFile(file, false);
+            if (decodedText.startsWith('http://') || decodedText.startsWith('https://')) {
+              window.location.href = decodedText;
+            } else {
+              window.location.href = `attend.html?token=${encodeURIComponent(decodedText)}`;
+            }
+          } catch (err) {
+            alert('Tidak dapat menemukan QR Code pada foto yang dipilih.\n\nPastikan foto jelas, tidak buram, dan QR code tidak terpotong.');
+          } finally {
+            inputAttendPhoto.value = '';
+          }
+        }
+      });
+    }
 
     if (typeof Html5QrcodeScanner !== 'undefined') {
       const scanner = new Html5QrcodeScanner("qr-reader", { fps: 10, qrbox: { width: 250, height: 250 } }, false);
