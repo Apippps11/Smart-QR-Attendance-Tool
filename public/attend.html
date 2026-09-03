@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Presensi Kehadiran - Smart QR Attendance</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Lucide Icons CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- html5-qrcode for in-browser camera scanner -->
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+    }
+  </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col justify-between antialiased selection:bg-indigo-500 selection:text-white">
+
+  <!-- Background Decorative Gradient Blobs -->
+  <div class="fixed inset-0 overflow-hidden pointer-events-none -z-10">
+    <div class="absolute -top-40 -left-40 w-96 h-96 bg-indigo-600/20 rounded-full blur-3xl"></div>
+    <div class="absolute top-1/3 -right-40 w-96 h-96 bg-emerald-600/15 rounded-full blur-3xl"></div>
+  </div>
+
+  <!-- Header -->
+  <header class="border-b border-slate-800/80 bg-slate-900/80 backdrop-blur sticky top-0 z-30">
+    <div class="max-w-md mx-auto px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center space-x-2.5">
+        <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-500 to-emerald-400 flex items-center justify-center shadow-lg shadow-indigo-500/20">
+          <i data-lucide="qr-code" class="w-5 h-5 text-white"></i>
+        </div>
+        <div>
+          <h1 class="font-bold text-base text-white tracking-tight leading-none">Smart Attendance</h1>
+          <span class="text-xs text-slate-400">Verifikasi Presensi 1x Scan</span>
+        </div>
+      </div>
+      <a href="/" class="text-xs px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition flex items-center gap-1 border border-slate-700/60">
+        <i data-lucide="monitor" class="w-3.5 h-3.5"></i>
+        <span>Admin</span>
+      </a>
+    </div>
+  </header>
+
+  <!-- Main Content Container -->
+  <main class="max-w-md mx-auto w-full px-4 py-6 flex-1 flex flex-col justify-center">
+
+    <!-- Card Container -->
+    <div class="bg-slate-800/90 backdrop-blur-xl border border-slate-700/80 rounded-2xl p-5 md:p-6 shadow-2xl relative overflow-hidden">
+      
+      <!-- Top Accent Bar -->
+      <div class="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-emerald-400"></div>
+
+      <!-- STATE 1: CAMERA SCANNER (When no token in URL) -->
+      <div id="scannerSection" class="hidden space-y-4 text-center">
+        <div class="w-12 h-12 rounded-full bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 mx-auto flex items-center justify-center">
+          <i data-lucide="camera" class="w-6 h-6"></i>
+        </div>
+        <div>
+          <h2 class="text-lg font-bold text-white">Scan QR Code Admin</h2>
+          <p class="text-xs text-slate-400 mt-1">Arahkan kamera ke layar admin untuk mendeteksi token absensi.</p>
+        </div>
+        <div id="qr-reader" class="rounded-xl overflow-hidden border border-slate-700 bg-black/40"></div>
+        <p class="text-[11px] text-slate-500">Atau langsung scan QR code dari kamera bawaan HP Anda.</p>
+      </div>
+
+      <!-- STATE 2: TOKEN CHECKING LOADER -->
+      <div id="checkingSection" class="py-10 text-center space-y-3">
+        <div class="inline-block animate-spin w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full"></div>
+        <p class="text-sm font-medium text-slate-300">Memeriksa keabsahan QR Code...</p>
+      </div>
+
+      <!-- STATE 3: ERROR / ALREADY USED BANNER -->
+      <div id="errorSection" class="hidden space-y-4">
+        <div class="p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-300 space-y-2">
+          <div class="flex items-center gap-2.5">
+            <i data-lucide="alert-triangle" class="w-5 h-5 text-red-400 shrink-0"></i>
+            <h3 class="font-bold text-sm text-red-200" id="errorTitle">QR Code Tidak Valid</h3>
+          </div>
+          <p class="text-xs text-red-300/90 leading-relaxed" id="errorMessage">
+            QR Code ini sudah pernah digunakan atau kedaluwarsa.
+          </p>
+        </div>
+        <button id="btnRescan" onclick="window.location.href='/attend.html'" class="w-full py-2.5 rounded-xl bg-slate-700 hover:bg-slate-600 text-white font-medium text-xs transition flex items-center justify-center gap-2">
+          <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+          <span>Scan Ulang / Muat Ulang</span>
+        </button>
+      </div>
+
+      <!-- STATE 4: ATTENDANCE FORM -->
+      <div id="formSection" class="hidden space-y-5">
+        
+        <!-- Token Valid Badge -->
+        <div class="flex items-center justify-between bg-indigo-500/10 border border-indigo-500/20 px-3 py-2 rounded-xl text-xs">
+          <div class="flex items-center gap-2 text-indigo-300">
+            <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span class="font-medium">QR Token Terverifikasi</span>
+          </div>
+          <span id="badgeToken" class="font-mono text-[11px] text-slate-400 bg-slate-800 px-2 py-0.5 rounded border border-slate-700"></span>
+        </div>
+
+        <div>
+          <h2 class="text-xl font-extrabold text-white tracking-tight">Formulir Presensi</h2>
+          <p class="text-xs text-slate-400 mt-0.5">Silakan lengkapi identitas Anda untuk mencatat kehadiran.</p>
+        </div>
+
+        <form id="attendanceForm" class="space-y-4">
+          <!-- Nama Lengkap Input -->
+          <div class="space-y-1.5">
+            <label for="inputName" class="block text-xs font-semibold text-slate-300">
+              Nama Lengkap <span class="text-red-400">*</span>
+            </label>
+            <div class="relative">
+              <span class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-400">
+                <i data-lucide="user" class="w-4 h-4"></i>
+              </span>
+              <input type="text" id="inputName" required placeholder="Masukkan nama lengkap Anda..."
+                class="w-full pl-9 pr-3 py-2.5 bg-slate-900/80 border border-slate-700 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition">
+            </div>
+          </div>
+
+          <!-- Grid Tanggal & Hari -->
+          <div class="grid grid-cols-2 gap-3">
+            <!-- Tanggal Input -->
+            <div class="space-y-1.5">
+              <label for="inputDate" class="block text-xs font-semibold text-slate-300">
+                Tanggal <span class="text-red-400">*</span>
+              </label>
+              <div class="relative">
+                <input type="date" id="inputDate" required
+                  class="w-full px-3 py-2.5 bg-slate-900/80 border border-slate-700 rounded-xl text-sm text-white focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition">
+              </div>
+            </div>
+
+            <!-- Hari Input (Auto synced) -->
+            <div class="space-y-1.5">
+              <label for="inputDay" class="block text-xs font-semibold text-slate-300">
+                Hari <span class="text-red-400">*</span>
+              </label>
+              <div class="relative">
+                <input type="text" id="inputDay" required readonly
+                  class="w-full px-3 py-2.5 bg-slate-800/50 border border-slate-700 rounded-xl text-sm text-indigo-300 font-medium cursor-not-allowed">
+              </div>
+            </div>
+          </div>
+
+          <!-- Device Signature Info Box -->
+          <div class="p-3 bg-slate-900/60 rounded-xl border border-slate-800 text-xs space-y-1">
+            <div class="flex items-center justify-between text-slate-400">
+              <span class="flex items-center gap-1.5">
+                <i data-lucide="shield-check" class="w-3.5 h-3.5 text-emerald-400"></i>
+                <span>Perangkat Terdeteksi:</span>
+              </span>
+              <span class="text-[10px] text-emerald-400 font-medium">1x Device Lock Aktif</span>
+            </div>
+            <p id="deviceLabel" class="text-slate-300 font-mono text-[11px] truncate"></p>
+          </div>
+
+          <!-- Submit Button -->
+          <button type="submit" id="btnSubmit"
+            class="w-full py-3 px-4 bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700 active:scale-[0.99] text-white font-semibold text-sm rounded-xl shadow-lg shadow-indigo-500/25 transition flex items-center justify-center gap-2">
+            <i data-lucide="check-circle" class="w-4 h-4"></i>
+            <span>Kirim Presensi Sekarang</span>
+          </button>
+        </form>
+      </div>
+
+      <!-- STATE 5: SUCCESS & GOOGLE CALENDAR CONNECT SECTION -->
+      <div id="successSection" class="hidden space-y-5 text-center">
+        <!-- Success Icon -->
+        <div class="w-16 h-16 rounded-full bg-emerald-500/10 border-2 border-emerald-500/40 text-emerald-400 mx-auto flex items-center justify-center shadow-lg shadow-emerald-500/20">
+          <i data-lucide="check" class="w-8 h-8"></i>
+        </div>
+
+        <div>
+          <span class="inline-block px-2.5 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-[11px] font-semibold tracking-wide uppercase mb-1">
+            Presensi Berhasil
+          </span>
+          <h2 class="text-xl font-extrabold text-white">Kehadiran Terverifikasi!</h2>
+          <p class="text-xs text-slate-400 mt-1">QR Code telah resmi digunakan dan status Anda tercatat di sistem.</p>
+        </div>
+
+        <!-- Summary Card -->
+        <div class="bg-slate-900/80 rounded-xl p-4 border border-slate-700/80 text-left space-y-2.5 text-xs">
+          <div class="flex justify-between pb-2 border-b border-slate-800">
+            <span class="text-slate-400">Nama Lengkap</span>
+            <span id="summaryName" class="font-bold text-white text-right"></span>
+          </div>
+          <div class="flex justify-between pb-2 border-b border-slate-800">
+            <span class="text-slate-400">Hari & Tanggal</span>
+            <span id="summaryDate" class="font-medium text-indigo-300 text-right"></span>
+          </div>
+          <div class="flex justify-between pb-2 border-b border-slate-800">
+            <span class="text-slate-400">Jam Presensi</span>
+            <span id="summaryTime" class="font-medium text-emerald-300 text-right"></span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-slate-400">Token Digunakan</span>
+            <span id="summaryToken" class="font-mono text-slate-400 text-right text-[11px]"></span>
+          </div>
+        </div>
+
+        <!-- GOOGLE CALENDAR ACTIONS -->
+        <div class="space-y-2.5 pt-2">
+          <div class="text-xs text-slate-400 font-medium flex items-center justify-center gap-1.5">
+            <i data-lucide="calendar" class="w-3.5 h-3.5 text-indigo-400"></i>
+            <span>Simpan jadwal kehadiran ke kalender Anda:</span>
+          </div>
+
+          <!-- Primary: Direct Google Calendar Web Intent -->
+          <a id="btnGoogleCalendar" href="#" target="_blank" rel="noopener noreferrer"
+            class="w-full py-3 px-4 bg-white hover:bg-slate-100 text-slate-900 font-bold text-xs rounded-xl shadow-lg transition flex items-center justify-center gap-2.5 border border-slate-200">
+            <!-- Google Calendar Official Colors Icon -->
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+              <path fill="#4285F4" d="M22 6c0-1.1-.9-2-2-2h-3V2h-2v2H9V2H7v2H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6z"/>
+              <path fill="#34A853" d="M4 8h16v12H4z"/>
+              <path fill="#FBBC05" d="M4 8h5v5H4z"/>
+              <path fill="#EA4335" d="M15 8h5v5h-5z"/>
+            </svg>
+            <span>Tambahkan ke Google Calendar</span>
+          </a>
+
+          <!-- Secondary: Download .ics file for offline/Apple Calendar -->
+          <button id="btnDownloadIcs" type="button"
+            class="w-full py-2.5 px-4 bg-slate-700/80 hover:bg-slate-700 text-slate-200 font-medium text-xs rounded-xl transition flex items-center justify-center gap-2 border border-slate-600/50">
+            <i data-lucide="download" class="w-3.5 h-3.5"></i>
+            <span>Unduh File Kalender (.ics)</span>
+          </button>
+        </div>
+
+        <!-- Finish / Back Note -->
+        <p class="text-[11px] text-slate-500 pt-2">
+          Terima kasih! Anda dapat menutup halaman ini sekarang.
+        </p>
+
+      </div>
+
+    </div>
+
+  </main>
+
+  <!-- Footer -->
+  <footer class="py-4 text-center text-xs text-slate-500 border-t border-slate-800/60">
+    <div class="max-w-md mx-auto px-4">
+      Smart QR Attendance Tool &bull; Single-Use Token System
+    </div>
+  </footer>
+
+  <!-- Scripts -->
+  <script src="/fingerprint.js"></script>
+  <script src="/attend.js"></script>
+  <script>
+    lucide.createIcons();
+  </script>
+</body>
+</html>

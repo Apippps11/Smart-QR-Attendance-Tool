@@ -1,0 +1,27 @@
+{
+  "name": "smart-qr-attendance-tool",
+  "version": "1.0.0",
+  "description": "Smart QR Attendance Tool with dynamic single-use QR, device lock, real-time audit, and Google Calendar integration",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "test": "node tests/verify.js"
+  },
+  "keywords": [
+    "qr-code",
+    "attendance",
+    "google-calendar",
+    "single-use-token",
+    "device-lock"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "qrcode": "^1.5.4",
+    "socket.io": "^4.8.1",
+    "uuid": "^11.1.0"
+  }
+}
