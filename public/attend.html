@@ -11,6 +11,8 @@
 
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
+  <!-- HackerNoon Pixel Icon Library -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@hackernoon/pixel-icon-library@1.1.0/fonts/iconfont.css">
   <!-- Lucide Icons CDN -->
   <script src="https://unpkg.com/lucide@latest"></script>
   <!-- html5-qrcode for in-browser camera scanner -->
@@ -20,6 +22,60 @@
   
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+    
+    /* HackerNoon Pixel Icon Library base */
+    .hn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      line-height: 1;
+      text-rendering: auto;
+      image-rendering: pixelated;
+    }
+    .hn:before {
+      vertical-align: middle;
+    }
+
+    /* Pixel Box & Corner Frame */
+    .pixel-box {
+      position: relative;
+      background: #111526;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.9), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    }
+    .pixel-corner-tl {
+      position: absolute;
+      top: -2px; left: -2px;
+      width: 8px; height: 8px;
+      border-top: 2px solid #818cf8;
+      border-left: 2px solid #818cf8;
+      pointer-events: none;
+    }
+    .pixel-corner-tr {
+      position: absolute;
+      top: -2px; right: -2px;
+      width: 8px; height: 8px;
+      border-top: 2px solid #818cf8;
+      border-right: 2px solid #818cf8;
+      pointer-events: none;
+    }
+    .pixel-corner-bl {
+      position: absolute;
+      bottom: -2px; left: -2px;
+      width: 8px; height: 8px;
+      border-bottom: 2px solid #34d399;
+      border-left: 2px solid #34d399;
+      pointer-events: none;
+    }
+    .pixel-corner-br {
+      position: absolute;
+      bottom: -2px; right: -2px;
+      width: 8px; height: 8px;
+      border-bottom: 2px solid #34d399;
+      border-right: 2px solid #34d399;
+      pointer-events: none;
+    }
+
     body {
       font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       background-color: #0a0c14;
@@ -41,7 +97,7 @@
     <div class="max-w-md mx-auto px-4 py-3.5 flex items-center justify-between">
       <div class="flex items-center space-x-3">
         <div class="w-9 h-9 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
-          <i data-lucide="qr-code" class="w-5 h-5"></i>
+          <i class="hn hn-retro-camera-solid text-lg"></i>
         </div>
         <div>
           <h1 class="font-extrabold text-sm text-white leading-none">Smart Attendance</h1>
@@ -49,7 +105,7 @@
         </div>
       </div>
       <a href="index.html" class="text-xs px-3 py-1.5 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] text-zinc-200 transition flex items-center gap-1.5 border border-white/10 font-semibold">
-        <i data-lucide="monitor" class="w-3.5 h-3.5 text-zinc-400"></i>
+        <i class="hn hn-laptop-code-solid text-xs text-zinc-400"></i>
         <span>Layar Admin</span>
       </a>
     </div>
@@ -59,12 +115,17 @@
   <main class="max-w-md mx-auto w-full px-4 py-6 flex-1 flex flex-col justify-center">
 
     <!-- Card Container -->
-    <div class="bg-[#121624] border border-white/10 rounded-3xl p-6 sm:p-7 shadow-2xl shadow-black/80 relative space-y-5 overflow-hidden">
+    <div class="pixel-box rounded-2xl p-6 sm:p-7 space-y-5 relative overflow-hidden">
+      <!-- Pixel Corner Accents -->
+      <div class="pixel-corner-tl"></div>
+      <div class="pixel-corner-tr"></div>
+      <div class="pixel-corner-bl"></div>
+      <div class="pixel-corner-br"></div>
 
       <!-- STATE 1: CAMERA SCANNER (When no token in URL) -->
       <div id="scannerSection" class="hidden space-y-4 text-center">
-        <div class="w-11 h-11 rounded-xl bg-zinc-900 border border-zinc-800 text-zinc-300 mx-auto flex items-center justify-center">
-          <i data-lucide="camera" class="w-5 h-5"></i>
+        <div class="w-14 h-14 rounded-2xl bg-indigo-500/15 border border-indigo-500/30 text-indigo-400 mx-auto flex items-center justify-center shadow-lg shadow-indigo-500/10">
+          <i class="hn hn-retro-camera-solid text-3xl"></i>
         </div>
         <div>
           <h2 class="text-base font-bold text-white">Scan QR Code Proyektor</h2>
@@ -169,8 +230,8 @@
 
       <!-- STATE 5: SUCCESS & GOOGLE CALENDAR -->
       <div id="successSection" class="hidden space-y-4 text-center">
-        <div class="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 mx-auto flex items-center justify-center">
-          <i data-lucide="check" class="w-6 h-6"></i>
+        <div class="w-14 h-14 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 mx-auto flex items-center justify-center shadow-lg shadow-emerald-500/10">
+          <i class="hn hn-badge-check-solid text-3xl"></i>
         </div>
 
         <div>
