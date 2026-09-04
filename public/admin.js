@@ -128,6 +128,8 @@
     const gateModal = document.getElementById('gateModal');
     const adminLoginModal = document.getElementById('adminLoginModal');
     const absensiChoiceModal = document.getElementById('absensiChoiceModal');
+    const cameraScanModal = document.getElementById('cameraScanModal');
+    const attendInlineModal = document.getElementById('attendInlineModal');
     const adminDashboardWrapper = document.getElementById('adminDashboardWrapper');
 
     if (!adminDashboardWrapper) return;
@@ -140,19 +142,24 @@
     }
 
     if (isAuth) {
-      // Authenticated Admin
+      // Authenticated Admin -> Reveal Dashboard
+      adminDashboardWrapper.classList.remove('locked', 'hidden');
       adminDashboardWrapper.style.removeProperty('display');
-      adminDashboardWrapper.classList.remove('hidden');
       if (gateModal) gateModal.classList.add('hidden');
       if (adminLoginModal) adminLoginModal.classList.add('hidden');
       if (absensiChoiceModal) absensiChoiceModal.classList.add('hidden');
+      if (cameraScanModal) cameraScanModal.classList.add('hidden');
+      if (attendInlineModal) attendInlineModal.classList.add('hidden');
       initAdminDashboard();
     } else {
-      // Unauthenticated -> Hard Lock
+      // Unauthenticated -> Hard Lock Dashboard & Show Gate Modal
+      adminDashboardWrapper.classList.add('locked', 'hidden');
       adminDashboardWrapper.style.setProperty('display', 'none', 'important');
-      adminDashboardWrapper.classList.add('hidden');
       if (gateModal) gateModal.classList.remove('hidden');
       if (adminLoginModal) adminLoginModal.classList.add('hidden');
+      if (absensiChoiceModal) absensiChoiceModal.classList.add('hidden');
+      if (cameraScanModal) cameraScanModal.classList.add('hidden');
+      if (attendInlineModal) attendInlineModal.classList.add('hidden');
     }
   }
 

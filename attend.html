@@ -22,7 +22,11 @@
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
     body {
       font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background-color: #090a0f;
+      background-color: #0a0c14;
+      background-image: 
+        radial-gradient(ellipse 70% 50% at 50% -10%, rgba(99, 102, 241, 0.14), transparent 60%),
+        radial-gradient(ellipse 60% 40% at 90% 100%, rgba(16, 185, 129, 0.06), transparent 60%);
+      background-attachment: fixed;
       color: #f4f4f5;
     }
     .font-mono {
@@ -33,18 +37,18 @@
 <body class="min-h-screen flex flex-col justify-between antialiased selection:bg-zinc-700 selection:text-white">
 
   <!-- Header -->
-  <header class="border-b border-[#1c2130] bg-[#11131a] sticky top-0 z-30">
-    <div class="max-w-md mx-auto px-4 py-3 flex items-center justify-between">
-      <div class="flex items-center space-x-2.5">
-        <div class="w-8 h-8 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-300">
-          <i data-lucide="qr-code" class="w-4 h-4"></i>
+  <header class="border-b border-white/10 bg-[#0e1220]/90 backdrop-blur-md sticky top-0 z-30">
+    <div class="max-w-md mx-auto px-4 py-3.5 flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <div class="w-9 h-9 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
+          <i data-lucide="qr-code" class="w-5 h-5"></i>
         </div>
         <div>
-          <h1 class="font-bold text-sm text-white leading-none">Smart Attendance</h1>
+          <h1 class="font-extrabold text-sm text-white leading-none">Smart Attendance</h1>
           <span class="text-[11px] text-zinc-400">Verifikasi Presensi 1x Scan</span>
         </div>
       </div>
-      <a href="index.html" class="text-xs px-2.5 py-1.5 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 transition flex items-center gap-1.5 border border-zinc-800">
+      <a href="index.html" class="text-xs px-3 py-1.5 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] text-zinc-200 transition flex items-center gap-1.5 border border-white/10 font-semibold">
         <i data-lucide="monitor" class="w-3.5 h-3.5 text-zinc-400"></i>
         <span>Layar Admin</span>
       </a>
@@ -55,7 +59,7 @@
   <main class="max-w-md mx-auto w-full px-4 py-6 flex-1 flex flex-col justify-center">
 
     <!-- Card Container -->
-    <div class="bg-[#11131a] border border-[#1e2333] rounded-2xl p-5 sm:p-6 shadow-2xl relative space-y-5">
+    <div class="bg-[#121624] border border-white/10 rounded-3xl p-6 sm:p-7 shadow-2xl shadow-black/80 relative space-y-5 overflow-hidden">
 
       <!-- STATE 1: CAMERA SCANNER (When no token in URL) -->
       <div id="scannerSection" class="hidden space-y-4 text-center">
@@ -110,53 +114,53 @@
       <div id="formSection" class="hidden space-y-4">
         
         <!-- Token Valid Badge -->
-        <div class="flex items-center justify-between bg-zinc-950 border border-zinc-800 px-3 py-2 rounded-xl text-xs">
+        <div class="flex items-center justify-between bg-[#161a28] border border-white/10 px-3.5 py-2.5 rounded-2xl text-xs shadow-sm">
           <div class="flex items-center gap-2 text-zinc-300">
-            <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
-            <span class="font-medium text-[11px]">QR Token Sah</span>
+            <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span class="font-bold text-[11px] text-emerald-400">QR Token Valid</span>
           </div>
-          <span id="badgeToken" class="font-mono text-[11px] text-zinc-300 bg-zinc-900 px-2 py-0.5 rounded border border-zinc-800"></span>
+          <span id="badgeToken" class="font-mono text-[11px] text-zinc-300 bg-white/10 px-2.5 py-0.5 rounded-full border border-white/15"></span>
         </div>
 
         <div>
-          <h2 class="text-lg font-bold text-white tracking-tight">Konfirmasi Kehadiran</h2>
+          <h2 class="text-xl font-extrabold text-white tracking-tight">Konfirmasi Kehadiran</h2>
           <p class="text-xs text-zinc-400 mt-0.5">Lengkapi nama lengkap Anda untuk mencatat presensi.</p>
         </div>
 
-        <form id="attendanceForm" class="space-y-3.5">
+        <form id="attendanceForm" class="space-y-4">
           <!-- Nama Lengkap Input -->
-          <div class="space-y-1">
+          <div class="space-y-1.5">
             <label for="inputName" class="block text-xs font-semibold text-zinc-300">
               Nama Lengkap <span class="text-red-400">*</span>
             </label>
             <input type="text" id="inputName" required placeholder="Masukkan nama lengkap..."
-              class="w-full px-3.5 py-2.5 bg-zinc-950 border border-zinc-800 rounded-xl text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-zinc-500 transition">
+              class="w-full px-4 py-3 bg-[#161a28] border border-white/10 rounded-xl text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500/50 transition font-medium">
           </div>
 
           <!-- Locked Date (Tamper-proof on iOS Safari) -->
-          <div class="p-3 bg-zinc-950 rounded-xl border border-zinc-800 text-xs select-none pointer-events-none space-y-1">
+          <div class="p-3 bg-[#161a28] rounded-2xl border border-white/10 text-xs select-none pointer-events-none space-y-1.5 shadow-sm">
             <div class="flex items-center justify-between text-zinc-400 text-[11px]">
-              <span>Tanggal Presensi (Regional)</span>
-              <span class="text-emerald-400 font-semibold flex items-center gap-1">🔒 Terkunci Hari Ini</span>
+              <span>Tanggal Presensi (Regional Area WIB)</span>
+              <span class="text-emerald-400 font-bold flex items-center gap-1">🔒 Terkunci Hari Ini</span>
             </div>
-            <div class="flex items-center gap-2 text-sm font-semibold text-zinc-200">
-              <i data-lucide="calendar" class="w-4 h-4 text-zinc-400"></i>
+            <div class="flex items-center gap-2 text-sm font-bold text-zinc-100">
+              <i data-lucide="calendar" class="w-4 h-4 text-emerald-400"></i>
               <span id="displayDate" class="font-mono">Memuat tanggal...</span>
             </div>
           </div>
 
           <!-- Device Signature Info Box -->
-          <div class="p-2.5 bg-zinc-950 rounded-xl border border-zinc-800 text-[11px] text-zinc-400 flex items-center justify-between">
-            <span class="flex items-center gap-1.5">
-              <i data-lucide="smartphone" class="w-3.5 h-3.5 text-zinc-400"></i>
+          <div class="p-3 bg-[#161a28] rounded-2xl border border-white/10 text-[11px] text-zinc-400 flex items-center justify-between shadow-sm">
+            <span class="flex items-center gap-2">
+              <i data-lucide="smartphone" class="w-4 h-4 text-zinc-400"></i>
               <span>Perangkat:</span>
             </span>
-            <span id="deviceLabel" class="text-zinc-300 font-mono truncate max-w-[200px]">Mendeteksi...</span>
+            <span id="deviceLabel" class="text-zinc-200 font-mono truncate max-w-[200px] font-semibold">Mendeteksi...</span>
           </div>
 
           <!-- Submit Button -->
           <button type="submit" id="btnSubmit"
-            class="w-full py-3 px-4 bg-white hover:bg-zinc-100 text-zinc-950 font-bold text-xs rounded-xl shadow-sm transition flex items-center justify-center gap-2">
+            class="w-full py-3.5 px-4 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-extrabold text-xs rounded-2xl shadow-lg shadow-emerald-500/25 transition flex items-center justify-center gap-2 active:scale-[0.99]">
             <i data-lucide="check" class="w-4 h-4"></i>
             <span>Kirim Presensi Sekarang</span>
           </button>
