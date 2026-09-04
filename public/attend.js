@@ -1,10 +1,11 @@
 /**
- * Logika Halaman Presensi Peserta (attend.js)
- * Mendukung:
- * 1. Cloud MQTT WSS over SSL (Bisa beda provider seluler / beda Wi-Fi / kuota 4G)
- * 2. Express Server API (Localhost / VPS Node.js)
- * 3. BroadcastChannel (Same-device local testing)
- * 4. Integrasi Google Calendar 1-Klik & Unduh .ics
+ * Presensi Kehadiran Peserta (attend.js)
+ * Fitur:
+ * 1. Verifikasi Token QR 1x Pakai
+ * 2. Kunci Tanggal Regional Otomatis (Anti-Ubah di iOS / Safari / Android)
+ * 3. Live Camera Scanning Saja (Foto Upload Dihapus)
+ * 4. MQTT WSS Cloud Sync & Local Storage Fallback
+ * 5. Integrasi Google Calendar & .ics
  */
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -24,8 +25,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   const attendanceForm = document.getElementById('attendanceForm');
   const inputName = document.getElementById('inputName');
-  const inputDate = document.getElementById('inputDate');
-  const inputDay = document.getElementById('inputDay');
+  const displayDate = document.getElementById('displayDate');
   const deviceLabel = document.getElementById('deviceLabel');
   const btnSubmit = document.getElementById('btnSubmit');
 
@@ -41,6 +41,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     return days[dateObj.getDay()];
   }
 
+  function getIndonesianMonthName(monthIdx) {
+    const months = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+    return months[monthIdx];
+  }
+
   function getLocalDateString(d = new Date()) {
     const year = d.getFullYear();
     const month = String(d.getMonth() + 1).padStart(2, '0');
@@ -49,15 +54,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   // Generate Device Fingerprint
-  const { deviceId, deviceInfo } = window.DeviceFingerprint.getDeviceInfo();
+  const { deviceId, deviceInfo } = window.DeviceFingerprint ? window.DeviceFingerprint.getDeviceInfo() : { deviceId: 'dev_client', deviceInfo: 'Mobile Device' };
   if (deviceLabel) {
     deviceLabel.textContent = deviceInfo;
   }
 
-  const broadcast = ('BroadcastChannel' in window) ? new BroadcastChannel('smart_qr_channel') : null;
   let mqttClient = null;
 
-  // Inisialisasi Cloud MQTT Client
+  // Inisialisasi Cloud MQTT Client jika ada session
   if (typeof mqtt !== 'undefined' && sessionId) {
     const brokerUrl = 'wss://broker.emqx.io:8084/mqtt';
     const clientId = 'sqr_user_' + Math.random().toString(16).substring(2, 10);
@@ -73,43 +77,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
-  // JIKA TIDAK ADA TOKEN -> Tampilkan Scanner Kamera & Opsi Foto
+  // JIKA TIDAK ADA TOKEN -> Tampilkan Scanner Kamera Langsung
   if (!token) {
     checkingSection.classList.add('hidden');
     scannerSection.classList.remove('hidden');
 
-    const inputAttendPhoto = document.getElementById('inputAttendPhoto');
-    const btnUploadAttendPhoto = document.getElementById('btnUploadAttendPhoto');
-
-    if (btnUploadAttendPhoto && inputAttendPhoto) {
-      btnUploadAttendPhoto.addEventListener('click', () => {
-        inputAttendPhoto.click();
-      });
-
-      inputAttendPhoto.addEventListener('change', async (e) => {
-        const file = e.target.files && e.target.files[0];
-        if (!file) return;
-
-        if (typeof Html5Qrcode !== 'undefined') {
-          const tempScanner = new Html5Qrcode("qr-reader");
-          try {
-            const decodedText = await tempScanner.scanFile(file, false);
-            if (decodedText.startsWith('http://') || decodedText.startsWith('https://')) {
-              window.location.href = decodedText;
-            } else {
-              window.location.href = `attend.html?token=${encodeURIComponent(decodedText)}`;
-            }
-          } catch (err) {
-            alert('Tidak dapat menemukan QR Code pada foto yang dipilih.\n\nPastikan foto jelas, tidak buram, dan QR code tidak terpotong.');
-          } finally {
-            inputAttendPhoto.value = '';
-          }
-        }
-      });
-    }
-
     if (typeof Html5QrcodeScanner !== 'undefined') {
-      const scanner = new Html5QrcodeScanner("qr-reader", { fps: 10, qrbox: { width: 250, height: 250 } }, false);
+      const scanner = new Html5QrcodeScanner("qr-reader", { fps: 12, qrbox: { width: 240, height: 240 } }, false);
       scanner.render((decodedText) => {
         scanner.clear();
         if (decodedText.startsWith('http://') || decodedText.startsWith('https://')) {
@@ -122,22 +96,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     return;
   }
 
-  // JIKA ADA TOKEN -> Set UI Token & Tampilkan Form
+  // JIKA ADA TOKEN -> Set UI Token & Format Tanggal Terkunci
   badgeToken.textContent = token;
 
-  // Setup Tanggal & Hari (Regional Time Lock - Strictly Today Only)
   const today = new Date();
-  const todayDateString = getLocalDateString(today);
-  inputDate.value = todayDateString;
-  inputDate.min = todayDateString;
-  inputDate.max = todayDateString;
-  inputDate.readOnly = true;
-  inputDay.value = getIndonesianDayName(today);
-  inputDay.readOnly = true;
+  if (displayDate) {
+    displayDate.textContent = `${getIndonesianDayName(today)}, ${today.getDate()} ${getIndonesianMonthName(today.getMonth())} ${today.getFullYear()}`;
+  }
 
   // Verifikasi cepat status token
   async function performQuickCheck() {
-    // 1. Cek via backend jika ada
     try {
       const res = await fetch(`/api/qr/check/${encodeURIComponent(token)}`);
       if (res.ok) {
@@ -146,11 +114,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         const d = await res.json();
         return { valid: false, status: d.status, message: d.message };
       }
-    } catch (e) {
-      // Backend tidak ada (Mode GitHub Pages)
-    }
+    } catch (e) {}
 
-    // 2. Cek via LocalStorage jika satu browser
     try {
       const tokens = JSON.parse(localStorage.getItem('sqr_qr_tokens')) || [];
       const target = tokens.find(t => t.token === token);
@@ -171,14 +136,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (!check.valid) {
     errorSection.classList.remove('hidden');
     if (check.status === 'USED') {
-      errorTitle.textContent = '❌ QR Code Sudah Digunakan!';
-      errorMessage.textContent = check.message || 'QR Code ini sudah pernah digunakan. Setiap QR Code hanya bisa dipakai 1 kali!';
+      errorTitle.textContent = 'QR Code Sudah Digunakan';
+      errorMessage.textContent = check.message || 'QR Code ini sudah pernah digunakan. Setiap QR Code hanya berlaku 1 kali.';
     } else if (check.status === 'EXPIRED') {
-      errorTitle.textContent = '⏱️ QR Code Kedaluwarsa';
-      errorMessage.textContent = check.message || 'QR Code ini sudah kedaluwarsa. Silakan scan QR code yang baru.';
+      errorTitle.textContent = 'QR Code Kedaluwarsa';
+      errorMessage.textContent = check.message || 'QR Code ini sudah kedaluwarsa. Silakan scan QR code yang baru di layar proyektor.';
     } else {
-      errorTitle.textContent = '⚠️ QR Code Tidak Valid';
-      errorMessage.textContent = check.message || 'Token QR tidak terdaftar.';
+      errorTitle.textContent = 'QR Code Tidak Sah';
+      errorMessage.textContent = check.message || 'Token QR tidak terdaftar dalam sistem.';
     }
     lucide.createIcons();
     return;
@@ -189,14 +154,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   lucide.createIcons();
   setTimeout(() => inputName.focus(), 200);
 
-  // --- SUBMIT PRESENSI ---
+  // --- SUBMIT PRESENSI (Sistem Waktu Mutlak - Anti-Ubah Tanggal) ---
   attendanceForm.addEventListener('submit', async (e) => {
     e.preventDefault();
 
     const name = inputName.value.trim();
-    const date = inputDate.value;
-    const day = inputDay.value;
     const now = new Date();
+    const date = getLocalDateString(now);
+    const day = getIndonesianDayName(now);
     const time = now.toLocaleTimeString('id-ID', { hour12: false });
 
     if (!name) {
@@ -204,18 +169,11 @@ document.addEventListener('DOMContentLoaded', async () => {
       return;
     }
 
-    // REGIONAL TIME LOCK VALIDATION
-    const expectedToday = getLocalDateString(new Date());
-    if (date !== expectedToday) {
-      alert(`Kunci Waktu Regional Aktif:\n\nPresensi hanya dapat dilakukan pada tanggal hari ini (${expectedToday}). Anda tidak dapat melakukan presensi untuk hari sebelum atau sesudah!`);
-      return;
-    }
-
     btnSubmit.disabled = true;
     const originalBtnText = btnSubmit.innerHTML;
     btnSubmit.innerHTML = `
-      <div class="inline-block animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full mr-2"></div>
-      <span>Memverifikasi Presensi...</span>
+      <div class="inline-block animate-spin w-4 h-4 border-2 border-zinc-900 border-t-transparent rounded-full mr-2"></div>
+      <span>Memverifikasi...</span>
     `;
 
     const attendType = (urlParams.get('type') || 'MASUK').toUpperCase();
@@ -240,7 +198,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         body: JSON.stringify(payload)
       });
 
-      if (response.ok || response.status === 409 || response.status === 403) {
+      if (response.ok || response.status === 409 || response.status === 403 || response.status === 400) {
         const result = await response.json();
         if (!response.ok || !result.success) {
           btnSubmit.disabled = false;
@@ -249,7 +207,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           if (response.status === 409) {
             formSection.classList.add('hidden');
             errorSection.classList.remove('hidden');
-            errorTitle.textContent = '❌ QR Code Baru Saja Digunakan';
+            errorTitle.textContent = 'QR Code Sudah Digunakan';
             errorMessage.textContent = result.error;
             lucide.createIcons();
           }
@@ -259,15 +217,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         renderSuccessScreen(result.attendance);
         return;
       }
-    } catch (err) {
-      // Server Node.js tidak ada -> Gunakan Cloud MQTT
-    }
+    } catch (err) {}
 
-    // 2. Kirim via Cloud Real-time MQTT (Beda Provider / Beda Wi-Fi)
+    // 2. Kirim via Cloud MQTT WSS (Beda Provider / Wi-Fi)
     if (mqttClient && sessionId) {
       const submitTopic = `smartqr/${sessionId}/submit`;
       const respTopic = `smartqr/${sessionId}/resp/${reqId}`;
-
       let answered = false;
 
       mqttClient.subscribe(respTopic, (err) => {
@@ -296,17 +251,15 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
       });
 
-      // Timeout safety: jika dalam 8 detik tidak ada balasan dari admin
       setTimeout(() => {
         if (!answered) {
-          // Coba fallback ke Local / Same-Device Storage
           attemptLocalFallback(payload, originalBtnText);
         }
       }, 7000);
       return;
     }
 
-    // 3. Fallback: Same-Device Local Engine
+    // 3. Fallback ke Local Storage Engine
     attemptLocalFallback(payload, originalBtnText);
   });
 
@@ -320,7 +273,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (existing) {
           btnSubmit.disabled = false;
           btnSubmit.innerHTML = originalBtnText;
-          alert(`Presensi Masuk Ditolak:\n\nPerangkat ini sudah tercatat melakukan Absensi Masuk hari ini atas nama "${existing.name}". 1 perangkat hanya bisa absen masuk 1 kali per hari!`);
+          alert(`Presensi Masuk Ditolak:\n\nPerangkat ini sudah tercatat melakukan Absensi Masuk hari ini atas nama "${existing.name}". 1 perangkat hanya bisa absen masuk 1 kali per hari.`);
           return;
         }
       } else if (currentType === 'KELUAR') {
@@ -328,13 +281,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (!masukRecord) {
           btnSubmit.disabled = false;
           btnSubmit.innerHTML = originalBtnText;
-          alert(`Presensi Keluar Ditolak:\n\nPerangkat Anda belum tercatat melakukan Absensi Masuk hari ini. Silakan lakukan Absensi Masuk terlebih dahulu!`);
+          alert('Presensi Keluar Ditolak:\n\nPerangkat Anda belum tercatat melakukan Absensi Masuk hari ini. Silakan lakukan Absensi Masuk terlebih dahulu.');
           return;
         }
         if (masukRecord.name.trim().toLowerCase() !== payload.name.trim().toLowerCase()) {
           btnSubmit.disabled = false;
           btnSubmit.innerHTML = originalBtnText;
-          alert(`Presensi Keluar Ditolak:\n\nNama ("${payload.name}") tidak cocok dengan data nama saat Absensi Masuk ("${masukRecord.name}"). Harap gunakan nama yang sama persis!`);
+          alert(`Presensi Keluar Ditolak:\n\nNama ("${payload.name}") tidak cocok dengan data saat Absensi Masuk ("${masukRecord.name}").`);
           return;
         }
         const existingKeluar = attendances.find(a => a.device_id === deviceId && a.date === payload.date && a.type === 'KELUAR');
@@ -348,68 +301,61 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       const tokens = JSON.parse(localStorage.getItem('sqr_qr_tokens')) || [];
       const targetToken = tokens.find(t => t.token === payload.token);
-      if (targetToken && targetToken.status === 'USED') {
+
+      if (!targetToken || targetToken.status !== 'ACTIVE') {
         btnSubmit.disabled = false;
         btnSubmit.innerHTML = originalBtnText;
-        alert('Presensi Ditolak:\n\nQR Code ini sudah pernah digunakan oleh pengguna lain!');
+        alert('Presensi Ditolak:\n\nQR Code tidak valid atau baru saja digunakan oleh pengguna lain.');
         return;
       }
 
-      if (targetToken) {
-        targetToken.status = 'USED';
-        targetToken.used_by_name = payload.name;
-        targetToken.used_at = new Date().toISOString();
-        targetToken.device_id = deviceId;
-        localStorage.setItem('sqr_qr_tokens', JSON.stringify(tokens));
-      }
+      // Mark Used & Save
+      const nowIso = new Date().toISOString();
+      targetToken.status = 'USED';
+      targetToken.used_at = nowIso;
+      targetToken.used_by_name = payload.name;
+      targetToken.device_id = deviceId;
+      targetToken.type = currentType;
+      localStorage.setItem('sqr_qr_tokens', JSON.stringify(tokens));
 
       const record = {
         id: Date.now(),
         token: payload.token,
         name: payload.name,
+        type: currentType,
         date: payload.date,
         day: payload.day,
         time: payload.time,
         device_id: deviceId,
         device_info: deviceInfo,
-        created_at: new Date().toISOString()
+        created_at: nowIso
       };
       attendances.unshift(record);
       localStorage.setItem('sqr_attendances', JSON.stringify(attendances));
-
-      if (broadcast) {
-        broadcast.postMessage({ type: 'SUBMIT_FROM_TAB', payload });
-      }
 
       renderSuccessScreen(record);
     } catch (e) {
       btnSubmit.disabled = false;
       btnSubmit.innerHTML = originalBtnText;
-      alert('Gagal menghubungi layar admin. Pastikan layar admin sedang terbuka dan aktif.');
+      alert('Gagal menyimpan presensi lokal.');
     }
   }
 
-  function renderSuccessScreen(attendance) {
+  function renderSuccessScreen(record) {
     formSection.classList.add('hidden');
     successSection.classList.remove('hidden');
 
-    summaryName.textContent = attendance.name;
-    summaryDate.textContent = `${attendance.day}, ${attendance.date}`;
-    summaryTime.textContent = `${attendance.time} WIB`;
-    summaryToken.textContent = attendance.token;
+    summaryName.textContent = record.name;
+    summaryDate.textContent = `${record.day}, ${record.date}`;
+    summaryTime.textContent = `${record.time} WIB (${record.type || 'MASUK'})`;
+    summaryToken.textContent = record.token;
 
-    setupGoogleCalendarIntegration({
-      name: attendance.name,
-      date: attendance.date,
-      day: attendance.day,
-      time: attendance.time,
-      token: attendance.token
-    });
-
+    setupGoogleCalendar(record);
     lucide.createIcons();
   }
 
-  function setupGoogleCalendarIntegration({ name, date, day, time, token }) {
+  function setupGoogleCalendar({ name, date, day, time, token, type }) {
+    const isKeluar = (type || '').toUpperCase() === 'KELUAR';
     const [year, month, dayNum] = date.split('-');
     const [hour, minute, second] = (time || '08:00:00').split(':');
 
@@ -424,16 +370,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     const startFormatted = formatGCalDateTime(startDate);
     const endFormatted = formatGCalDateTime(endDate);
 
-    const title = `Presensi: ${name}`;
-    const description = `Bukti Kehadiran Resmi Smart QR Attendance Tool.\n\nNama: ${name}\nHari: ${day}\nTanggal: ${date}\nJam Masuk: ${time} WIB\nKode Token: ${token}\nStatus: Hadir Terverifikasi (1x Device Lock)`;
-    const location = `Sistem Presensi Smart QR`;
+    const title = `Presensi ${isKeluar ? 'Keluar' : 'Masuk'}: ${name}`;
+    const description = `Bukti Kehadiran Resmi Smart QR Attendance.\n\nJenis: Presensi ${isKeluar ? 'Keluar' : 'Masuk'}\nNama: ${name}\nHari: ${day}\nTanggal: ${date}\nJam: ${time} WIB\nToken: ${token}`;
+    const location = 'Sistem Presensi Smart QR';
 
-    // Direct Google Calendar Web Intent URL
-    const gcalUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(title)}&dates=${startFormatted}/${endFormatted}&details=${encodeURIComponent(description)}&location=${encodeURIComponent(location)}`;
-    btnGoogleCalendar.href = gcalUrl;
+    btnGoogleCalendar.href = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(title)}&dates=${startFormatted}/${endFormatted}&details=${encodeURIComponent(description)}&location=${encodeURIComponent(location)}`;
 
-    // Download .ics file
-    btnDownloadIcs.addEventListener('click', () => {
+    btnDownloadIcs.onclick = () => {
       const nowIso = new Date().toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z';
       const icsContent = [
         'BEGIN:VCALENDAR',
@@ -457,11 +400,10 @@ document.addEventListener('DOMContentLoaded', async () => {
       const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
       const link = document.createElement('a');
       link.href = window.URL.createObjectURL(blob);
-      link.setAttribute('download', `Presensi-${name.replace(/\s+/g, '_')}-${date}.ics`);
+      link.setAttribute('download', `Presensi_${isKeluar ? 'Keluar' : 'Masuk'}-${name.replace(/\s+/g, '_')}-${date}.ics`);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-    });
+    };
   }
-
 });
