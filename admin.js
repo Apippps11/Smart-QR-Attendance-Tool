@@ -166,6 +166,14 @@
     // Run auth check immediately
     checkAuthStatus();
 
+    // Set Regional Date for Gate & Choice modals immediately
+    const today = new Date();
+    const fullDateText = `${getIndonesianDayName(today)}, ${today.getDate()} ${getIndonesianMonthName(today.getMonth())} ${today.getFullYear()}`;
+    const gateRegionalDate = document.getElementById('gateRegionalDate');
+    const choiceRegionalDate = document.getElementById('choiceRegionalDate');
+    if (gateRegionalDate) gateRegionalDate.textContent = fullDateText;
+    if (choiceRegionalDate) choiceRegionalDate.textContent = fullDateText;
+
     // DOM Elements
     const gateModal = document.getElementById('gateModal');
     const btnOpenAdminLogin = document.getElementById('btnOpenAdminLogin');
@@ -782,6 +790,7 @@
     bootAdminQr();
     loadAuditData();
     populateYearFilter();
+    populateDayFilter();
     loadAttendanceData();
     lucide.createIcons();
   }
@@ -798,7 +807,7 @@
     const tabs = [
       { btn: tabBtnProjector, view: viewProjector },
       { btn: tabBtnAudit, view: viewAudit, onShow: loadAuditData },
-      { btn: tabBtnAttendance, view: viewAttendance, onShow: () => { populateYearFilter(); loadAttendanceData(); } }
+      { btn: tabBtnAttendance, view: viewAttendance, onShow: () => { populateYearFilter(); populateDayFilter(); loadAttendanceData(); } }
     ];
 
     tabs.forEach(t => {
@@ -878,7 +887,7 @@
     const btnPeriodMonth = document.getElementById('btnPeriodMonth');
     const selectFilterYear = document.getElementById('selectFilterYear');
     const selectFilterMonth = document.getElementById('selectFilterMonth');
-    const filterDate = document.getElementById('filterDate');
+    const selectFilterDay = document.getElementById('selectFilterDay');
     const filterSearch = document.getElementById('filterSearch');
     const btnResetFilter = document.getElementById('btnResetFilter');
     const btnExportCsv = document.getElementById('btnExportCsv');
@@ -896,7 +905,7 @@
       else if (activePeriodFilter === 'WEEK') targetBtn = btnPeriodWeek;
       else if (activePeriodFilter === 'MONTH') targetBtn = btnPeriodMonth;
 
-      if (targetBtn) {
+      if (targetBtn && activePeriodFilter !== 'CUSTOM') {
         targetBtn.classList.add('active', 'bg-zinc-800', 'text-white', 'border-zinc-700');
         targetBtn.classList.remove('bg-zinc-950', 'text-zinc-400', 'border-zinc-800');
       }
@@ -905,7 +914,7 @@
     if (btnPeriodAll) {
       btnPeriodAll.addEventListener('click', () => {
         activePeriodFilter = 'ALL';
-        filterDate.value = '';
+        if (selectFilterDay) selectFilterDay.value = 'ALL';
         updatePeriodButtons();
         loadAttendanceData();
       });
@@ -914,7 +923,7 @@
     if (btnPeriodToday) {
       btnPeriodToday.addEventListener('click', () => {
         activePeriodFilter = 'TODAY';
-        filterDate.value = '';
+        if (selectFilterDay) selectFilterDay.value = 'ALL';
         updatePeriodButtons();
         loadAttendanceData();
       });
@@ -923,7 +932,7 @@
     if (btnPeriodWeek) {
       btnPeriodWeek.addEventListener('click', () => {
         activePeriodFilter = 'WEEK';
-        filterDate.value = '';
+        if (selectFilterDay) selectFilterDay.value = 'ALL';
         updatePeriodButtons();
         loadAttendanceData();
       });
@@ -932,7 +941,7 @@
     if (btnPeriodMonth) {
       btnPeriodMonth.addEventListener('click', () => {
         activePeriodFilter = 'MONTH';
-        filterDate.value = '';
+        if (selectFilterDay) selectFilterDay.value = 'ALL';
         updatePeriodButtons();
         loadAttendanceData();
       });
@@ -940,6 +949,7 @@
 
     if (selectFilterYear) {
       selectFilterYear.addEventListener('change', () => {
+        updateMonthOptions();
         loadAttendanceData();
       });
     }
@@ -950,9 +960,9 @@
       });
     }
 
-    if (filterDate) {
-      filterDate.addEventListener('change', () => {
-        if (filterDate.value) {
+    if (selectFilterDay) {
+      selectFilterDay.addEventListener('change', () => {
+        if (selectFilterDay.value !== 'ALL') {
           activePeriodFilter = 'CUSTOM';
           updatePeriodButtons();
         }
@@ -970,8 +980,9 @@
       btnResetFilter.addEventListener('click', () => {
         activePeriodFilter = 'ALL';
         if (selectFilterYear) selectFilterYear.value = 'ALL';
+        updateMonthOptions();
         if (selectFilterMonth) selectFilterMonth.value = 'ALL';
-        if (filterDate) filterDate.value = '';
+        if (selectFilterDay) selectFilterDay.value = 'ALL';
         if (filterSearch) filterSearch.value = '';
         updatePeriodButtons();
         loadAttendanceData();
@@ -994,43 +1005,122 @@
         createNewActiveToken();
         loadAuditData();
         populateYearFilter();
+        populateDayFilter();
         loadAttendanceData();
         showToast('Data Direset', 'Seluruh data presensi telah dikosongkan.');
       });
     }
   }
 
-  // Populate dynamic Year selector from existing attendance records
+  // Populate dynamic Year selector starting strictly from 2026 onwards
   function populateYearFilter() {
     const selectFilterYear = document.getElementById('selectFilterYear');
     if (!selectFilterYear) return;
 
     const attendances = getStoredAttendances();
-    const currentYear = new Date().getFullYear().toString();
-    const yearSet = new Set([currentYear]);
+    const currentYear = new Date().getFullYear();
+    const minYear = 2026;
+    const yearSet = new Set();
+    yearSet.add(2026);
+    if (currentYear > 2026) {
+      yearSet.add(currentYear);
+    }
 
     attendances.forEach(a => {
       if (a.date) {
-        const yr = a.date.split('-')[0];
-        if (yr && yr.length === 4) yearSet.add(yr);
+        const yr = parseInt(a.date.split('-')[0], 10);
+        if (!isNaN(yr) && yr >= minYear) {
+          yearSet.add(yr);
+        }
       }
     });
 
-    const years = Array.from(yearSet).sort().reverse();
+    const years = Array.from(yearSet).sort((a, b) => a - b);
     const prevVal = selectFilterYear.value;
 
-    selectFilterYear.innerHTML = '<option value="ALL">Semua Tahun</option>';
+    selectFilterYear.innerHTML = '<option value="ALL">Semua Tahun (Mulai 2026)</option>';
     years.forEach(y => {
       const opt = document.createElement('option');
-      opt.value = y;
+      opt.value = String(y);
       opt.textContent = `Tahun ${y}`;
       selectFilterYear.appendChild(opt);
     });
 
-    if (years.includes(prevVal)) {
+    if (prevVal && (prevVal === 'ALL' || years.map(String).includes(prevVal))) {
       selectFilterYear.value = prevVal;
     } else {
       selectFilterYear.value = 'ALL';
+    }
+
+    updateMonthOptions();
+  }
+
+  // Update Month options dynamically (For 2026, strictly August onwards)
+  function updateMonthOptions() {
+    const selectFilterYear = document.getElementById('selectFilterYear');
+    const selectFilterMonth = document.getElementById('selectFilterMonth');
+    if (!selectFilterMonth) return;
+
+    const selectedYear = selectFilterYear ? selectFilterYear.value : 'ALL';
+    const prevVal = selectFilterMonth.value;
+
+    const allMonths = [
+      { val: '01', name: 'Januari' },
+      { val: '02', name: 'Februari' },
+      { val: '03', name: 'Maret' },
+      { val: '04', name: 'April' },
+      { val: '05', name: 'Mei' },
+      { val: '06', name: 'Juni' },
+      { val: '07', name: 'Juli' },
+      { val: '08', name: 'Agustus' },
+      { val: '09', name: 'September' },
+      { val: '10', name: 'Oktober' },
+      { val: '11', name: 'November' },
+      { val: '12', name: 'Desember' }
+    ];
+
+    // Constrain: Year 2026 starts strictly from August (08) onwards
+    const availableMonths = (selectedYear === '2026')
+      ? allMonths.filter(m => parseInt(m.val, 10) >= 8)
+      : allMonths;
+
+    selectFilterMonth.innerHTML = (selectedYear === '2026')
+      ? '<option value="ALL">Semua Bulan (Mulai Ags)</option>'
+      : '<option value="ALL">Semua Bulan</option>';
+
+    availableMonths.forEach(m => {
+      const opt = document.createElement('option');
+      opt.value = m.val;
+      opt.textContent = m.name;
+      selectFilterMonth.appendChild(opt);
+    });
+
+    if (availableMonths.some(m => m.val === prevVal)) {
+      selectFilterMonth.value = prevVal;
+    } else {
+      selectFilterMonth.value = 'ALL';
+    }
+  }
+
+  // Populate Day selector dropdown (Tanggal 01 s/d 31 - no HTML datepicker)
+  function populateDayFilter() {
+    const selectFilterDay = document.getElementById('selectFilterDay');
+    if (!selectFilterDay) return;
+
+    const prevVal = selectFilterDay.value;
+    selectFilterDay.innerHTML = '<option value="ALL">Semua Tanggal</option>';
+    for (let d = 1; d <= 31; d++) {
+      const dayStr = String(d).padStart(2, '0');
+      const opt = document.createElement('option');
+      opt.value = dayStr;
+      opt.textContent = `Tanggal ${dayStr}`;
+      selectFilterDay.appendChild(opt);
+    }
+
+    if (prevVal && prevVal !== 'ALL') {
+      selectFilterDay.value = prevVal;
+    } else {
+      selectFilterDay.value = 'ALL';
     }
   }
 
@@ -1045,7 +1135,7 @@
 
     const selectFilterYear = document.getElementById('selectFilterYear');
     const selectFilterMonth = document.getElementById('selectFilterMonth');
-    const filterDate = document.getElementById('filterDate');
+    const selectFilterDay = document.getElementById('selectFilterDay');
     const filterSearch = document.getElementById('filterSearch');
 
     if (!attendanceTableBody) return;
@@ -1061,43 +1151,48 @@
 
     const selectedYear = selectFilterYear ? selectFilterYear.value : 'ALL';
     const selectedMonth = selectFilterMonth ? selectFilterMonth.value : 'ALL';
-    const specificDate = filterDate ? filterDate.value : '';
+    const selectedDay = selectFilterDay ? selectFilterDay.value : 'ALL';
     const searchTerm = filterSearch ? filterSearch.value.trim().toLowerCase() : '';
 
-    // Apply combined filters
+    // Apply combined filters (Strictly starting from August 2026)
     const filtered = all.filter(item => {
+      // Data before August 2026 is strictly excluded
+      if (item.date && item.date < '2026-08-01') return false;
+
       // 1. Search term filter
       if (searchTerm) {
-        const match = item.name.toLowerCase().includes(searchTerm) ||
+        const match = (item.name || '').toLowerCase().includes(searchTerm) ||
                       (item.token || '').toLowerCase().includes(searchTerm) ||
                       (item.device_info || '').toLowerCase().includes(searchTerm);
         if (!match) return false;
       }
 
-      // 2. Specific Date Picker filter
-      if (specificDate) {
-        if (item.date !== specificDate) return false;
-        return true; // if explicit date picked, overrides period
-      }
-
-      // 3. Year filter
+      // 2. Year filter (2026 onwards)
       if (selectedYear !== 'ALL') {
-        if (!item.date.startsWith(selectedYear)) return false;
+        if (!item.date || !item.date.startsWith(selectedYear)) return false;
       }
 
-      // 4. Month filter
+      // 3. Month filter
       if (selectedMonth !== 'ALL') {
         const itemMonth = (item.date || '').split('-')[1];
         if (itemMonth !== selectedMonth) return false;
       }
 
-      // 5. Quick Period filter
-      if (activePeriodFilter === 'TODAY') {
-        if (item.date !== todayStr) return false;
-      } else if (activePeriodFilter === 'WEEK') {
-        if (item.date < weekAgoStr || item.date > todayStr) return false;
-      } else if (activePeriodFilter === 'MONTH') {
-        if (!item.date.startsWith(thisMonthPrefix)) return false;
+      // 4. Day Dropdown filter (Full tulisan Tanggal 01 - 31)
+      if (selectedDay !== 'ALL') {
+        const itemDay = (item.date || '').split('-')[2];
+        if (itemDay !== selectedDay) return false;
+      }
+
+      // 5. Quick Period filter (Only when day is 'ALL')
+      if (selectedDay === 'ALL') {
+        if (activePeriodFilter === 'TODAY') {
+          if (item.date !== todayStr) return false;
+        } else if (activePeriodFilter === 'WEEK') {
+          if (item.date < weekAgoStr || item.date > todayStr) return false;
+        } else if (activePeriodFilter === 'MONTH') {
+          if (!item.date.startsWith(thisMonthPrefix)) return false;
+        }
       }
 
       return true;
@@ -1106,13 +1201,14 @@
     // Update Metrics
     const masukCount = filtered.filter(a => a.type === 'MASUK' || !a.type).length;
     const keluarCount = filtered.filter(a => a.type === 'KELUAR').length;
+    const validAll = all.filter(a => !a.date || a.date >= '2026-08-01');
 
     if (metricFilteredCount) metricFilteredCount.textContent = filtered.length;
     if (metricMasukCount) metricMasukCount.textContent = masukCount;
     if (metricKeluarCount) metricKeluarCount.textContent = keluarCount;
-    if (metricTotalAllTime) metricTotalAllTime.textContent = all.length;
+    if (metricTotalAllTime) metricTotalAllTime.textContent = validAll.length;
 
-    // Render Table Based on Active SubTab
+    // Render Table Based on Active SubTab with clean empty states
     if (activeSubTab === 'MASUK') {
       attendanceTableHead.innerHTML = `
         <tr>
@@ -1127,7 +1223,7 @@
 
       const records = filtered.filter(a => a.type === 'MASUK' || !a.type);
       if (records.length === 0) {
-        attendanceTableBody.innerHTML = `<tr><td colspan="6" class="py-8 text-center text-zinc-500">Tidak ada data Absensi Masuk pada filter ini.</td></tr>`;
+        attendanceTableBody.innerHTML = `<tr><td colspan="6" class="py-12 text-center text-zinc-500 font-medium text-xs">Belum ada data presensi.</td></tr>`;
         return;
       }
 
@@ -1159,7 +1255,7 @@
 
       const records = filtered.filter(a => a.type === 'KELUAR');
       if (records.length === 0) {
-        attendanceTableBody.innerHTML = `<tr><td colspan="6" class="py-8 text-center text-zinc-500">Tidak ada data Absensi Keluar pada filter ini.</td></tr>`;
+        attendanceTableBody.innerHTML = `<tr><td colspan="6" class="py-12 text-center text-zinc-500 font-medium text-xs">Belum ada data presensi.</td></tr>`;
         return;
       }
 
@@ -1216,7 +1312,7 @@
 
       const paired = Array.from(groupMap.values());
       if (paired.length === 0) {
-        attendanceTableBody.innerHTML = `<tr><td colspan="7" class="py-8 text-center text-zinc-500">Tidak ada data absensi pada periode yang dipilih.</td></tr>`;
+        attendanceTableBody.innerHTML = `<tr><td colspan="7" class="py-12 text-center text-zinc-500 font-medium text-xs">Belum ada data presensi.</td></tr>`;
         return;
       }
 
@@ -1325,17 +1421,26 @@
   function initClock() {
     const liveClock = document.getElementById('liveClock');
     const liveDate = document.getElementById('liveDate');
+    const gateRegionalDate = document.getElementById('gateRegionalDate');
+    const choiceRegionalDate = document.getElementById('choiceRegionalDate');
 
     function update() {
       const now = new Date();
       if (liveClock) liveClock.textContent = now.toLocaleTimeString('id-ID', { hour12: false });
+      const fullDateStr = now.toLocaleDateString('id-ID', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+      });
       if (liveDate) {
-        liveDate.textContent = now.toLocaleDateString('id-ID', {
-          weekday: 'long',
-          year: 'numeric',
-          month: 'short',
-          day: 'numeric'
-        });
+        liveDate.textContent = fullDateStr;
+      }
+      if (gateRegionalDate) {
+        gateRegionalDate.textContent = fullDateStr;
+      }
+      if (choiceRegionalDate) {
+        choiceRegionalDate.textContent = fullDateStr;
       }
     }
     update();

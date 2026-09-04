@@ -77,6 +77,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
+  // Format Tanggal Regional Indonesia (WIB)
+  const today = new Date();
+  const fullRegionalDate = `${getIndonesianDayName(today)}, ${today.getDate()} ${getIndonesianMonthName(today.getMonth())} ${today.getFullYear()}`;
+  const scannerRegionalDate = document.getElementById('scannerRegionalDate');
+  if (scannerRegionalDate) {
+    scannerRegionalDate.textContent = fullRegionalDate;
+  }
+
   // JIKA TIDAK ADA TOKEN -> Tampilkan Scanner Kamera Langsung
   if (!token) {
     checkingSection.classList.add('hidden');
@@ -99,9 +107,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   // JIKA ADA TOKEN -> Set UI Token & Format Tanggal Terkunci
   badgeToken.textContent = token;
 
-  const today = new Date();
   if (displayDate) {
-    displayDate.textContent = `${getIndonesianDayName(today)}, ${today.getDate()} ${getIndonesianMonthName(today.getMonth())} ${today.getFullYear()}`;
+    displayDate.textContent = fullRegionalDate;
   }
 
   // Verifikasi cepat status token

@@ -91,6 +91,15 @@
         <p class="text-xs text-zinc-400 mt-1">Pilih menu untuk melanjutkan proses presensi atau administrasi</p>
       </div>
 
+      <!-- Regional Date Info (WIB Full Text) -->
+      <div class="p-2.5 bg-zinc-950 rounded-xl border border-zinc-800 text-xs flex items-center justify-between text-zinc-400 select-none">
+        <span class="flex items-center gap-1.5 font-medium">
+          <i data-lucide="calendar" class="w-3.5 h-3.5 text-zinc-400"></i>
+          <span id="gateRegionalDate">Memuat tanggal...</span>
+        </span>
+        <span class="text-[10px] text-emerald-400 font-semibold px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20">WIB (GMT+7)</span>
+      </div>
+
       <div class="space-y-2.5 pt-1">
         <!-- Button 1: Admin Login -->
         <button id="btnOpenAdminLogin" type="button"
@@ -144,6 +153,15 @@
       <div>
         <h3 class="text-lg font-bold text-white tracking-tight">Pilih Jenis Absensi</h3>
         <p class="text-xs text-zinc-400 mt-1">Tentukan status kehadiran yang ingin Anda catat saat ini</p>
+      </div>
+
+      <!-- Regional Date Info (WIB Full Text) -->
+      <div class="p-2.5 bg-zinc-950 rounded-xl border border-zinc-800 text-xs flex items-center justify-between text-zinc-400 select-none">
+        <span class="flex items-center gap-1.5 font-medium">
+          <i data-lucide="calendar" class="w-3.5 h-3.5 text-zinc-400"></i>
+          <span id="choiceRegionalDate">Memuat tanggal...</span>
+        </span>
+        <span class="text-[10px] text-emerald-400 font-semibold px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20">WIB (GMT+7)</span>
       </div>
 
       <div class="space-y-2.5 pt-1">
@@ -785,11 +803,12 @@
               </select>
             </div>
 
-            <!-- Tanggal Spesifik -->
-            <div class="flex items-center gap-1.5">
+            <!-- Filter Tanggal Dropdown (Full Tulisan, Tanpa Datepicker) -->
+            <div class="flex items-center gap-1.5 min-w-[130px]">
               <span class="text-[11px] text-zinc-400">Tanggal:</span>
-              <input type="date" id="filterDate"
-                class="px-2.5 py-1.5 bg-zinc-950 border border-zinc-800 rounded-lg text-xs text-zinc-200 focus:outline-none focus:border-zinc-500">
+              <select id="selectFilterDay" class="w-full px-2.5 py-1.5 bg-zinc-950 border border-zinc-800 rounded-lg text-xs text-zinc-200 focus:outline-none focus:border-zinc-500">
+                <option value="ALL">Semua Tanggal</option>
+              </select>
             </div>
 
             <!-- Search Input -->
