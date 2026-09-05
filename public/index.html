@@ -275,7 +275,7 @@
   <!-- MODAL 1: INITIAL GATE POPUP (ADMIN LOGIN vs ABSENSI)     -->
   <!-- ======================================================== -->
   <div id="gateModal" class="fixed inset-0 z-50 bg-[#090b10]/92 backdrop-blur-md flex items-center justify-center p-4">
-    <div class="pixel-box rounded-2xl p-5 sm:p-6 max-w-sm w-full space-y-4 text-center relative overflow-hidden">
+    <div class="pixel-box rounded-2xl p-6 sm:p-7 max-w-[425px] w-full space-y-5 text-center relative overflow-hidden">
       
       <!-- Pixel Corner Accents -->
       <div class="pixel-corner-tl"></div>
@@ -284,62 +284,62 @@
       <div class="pixel-corner-br"></div>
 
       <!-- Ambient Card Highlight -->
-      <div class="absolute -top-20 left-1/2 -translate-x-1/2 w-40 h-40 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none"></div>
+      <div class="absolute -top-24 left-1/2 -translate-x-1/2 w-44 h-44 bg-indigo-500/15 rounded-full blur-3xl pointer-events-none"></div>
 
       <!-- Theme Toggle Button (Compact, Absolute Top-Right Corner) -->
       <button id="btnThemeToggleGate" type="button" title="Ganti Tema (Light / Dark)" aria-label="Ganti Tema (Light / Dark)"
-        class="absolute top-3.5 right-3.5 z-30 w-8 h-8 rounded-lg bg-white/[0.08] hover:bg-white/[0.15] border border-white/10 text-white transition flex items-center justify-center select-none active:scale-95 cursor-pointer">
+        class="absolute top-4 right-4 z-30 w-8 h-8 rounded-lg bg-white/[0.08] hover:bg-white/[0.15] border border-white/10 text-white transition flex items-center justify-center select-none active:scale-95 cursor-pointer">
         <i id="gateThemeIcon" class="hn hn-sun-solid text-white text-sm"></i>
       </button>
 
       <!-- Distinctive Pixel Emblem (Presisi, Simetris & Bayangan Rapi) -->
-      <div class="relative w-14 h-14 mx-auto flex items-center justify-center mt-1">
+      <div class="relative w-15 h-15 mx-auto flex items-center justify-center mt-1">
         <div class="absolute inset-0 rounded-2xl bg-indigo-500/20 blur-xl pointer-events-none"></div>
-        <div class="relative w-14 h-14 rounded-2xl bg-[#0c0f1d] border border-indigo-500/30 flex items-center justify-center text-indigo-400 shadow-[0_0_25px_-5px_rgba(99,102,241,0.3)] ring-1 ring-white/10">
+        <div class="relative w-15 h-15 rounded-2xl bg-[#0c0f1d] border border-indigo-500/30 flex items-center justify-center text-indigo-400 shadow-[0_0_28px_-5px_rgba(99,102,241,0.3)] ring-1 ring-white/10">
           <i class="hn hn-laptop-code-solid text-2xl"></i>
         </div>
       </div>
 
       <!-- Title & Subtitle -->
       <div class="space-y-1 relative">
-        <h2 class="text-lg sm:text-xl font-extrabold text-white tracking-tight">Presensi Kehadiran QR</h2>
-        <p class="text-[11px] sm:text-xs text-zinc-400 max-w-xs mx-auto leading-relaxed">Pilih menu untuk melanjutkan proses presensi atau administrasi sistem</p>
+        <h2 class="text-xl font-extrabold text-white tracking-tight">Presensi Kehadiran QR</h2>
+        <p class="text-xs text-zinc-400 max-w-xs mx-auto leading-relaxed">Pilih menu untuk melanjutkan proses presensi atau administrasi sistem</p>
       </div>
 
       <!-- Menu Actions -->
-      <div class="space-y-2.5 pt-1 relative">
+      <div class="space-y-3 pt-1 relative">
         <!-- Button 1: Admin Login -->
         <button id="btnOpenAdminLogin" type="button"
-          class="w-full p-3 sm:p-3.5 rounded-xl bg-[#151928] hover:bg-[#1c2237] border border-white/10 hover:border-indigo-500/50 text-zinc-200 transition-all duration-200 flex items-center justify-between group shadow-sm hover:shadow-md relative overflow-hidden cursor-pointer">
-          <div class="flex items-center gap-3 text-left">
-            <div class="w-9 h-9 rounded-lg bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-center text-indigo-400 group-hover:scale-105 transition">
-              <i class="hn hn-lock-solid text-lg"></i>
+          class="w-full p-3.5 sm:p-4 rounded-xl bg-[#151928] hover:bg-[#1c2237] border border-white/10 hover:border-indigo-500/50 text-zinc-200 transition-all duration-200 flex items-center justify-between group shadow-sm hover:shadow-md relative overflow-hidden cursor-pointer">
+          <div class="flex items-center gap-3.5 text-left">
+            <div class="w-10 h-10 rounded-lg bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-center text-indigo-400 group-hover:scale-105 transition">
+              <i class="hn hn-lock-solid text-xl"></i>
             </div>
             <div>
-              <div class="text-white font-bold text-xs sm:text-sm group-hover:text-indigo-300 transition">
+              <div class="text-white font-bold text-sm group-hover:text-indigo-300 transition">
                 Admin Login
               </div>
-              <div class="text-[10px] sm:text-[11px] text-zinc-400">Proyektor QR & rekapitulasi data</div>
+              <div class="text-[11px] text-zinc-400">Proyektor QR & rekapitulasi data</div>
             </div>
           </div>
-          <div class="flex items-center gap-1 text-zinc-500 group-hover:text-indigo-400 transition">
-            <span class="text-[10px] font-mono hidden sm:inline">Masuk</span>
+          <div class="flex items-center gap-1.5 text-zinc-500 group-hover:text-indigo-400 transition">
+            <span class="text-[11px] font-mono hidden sm:inline">Masuk</span>
             <i class="hn hn-arrow-right text-xs group-hover:translate-x-0.5 transition"></i>
           </div>
         </button>
 
         <!-- Button 2: Absensi Peserta (High Contrast CTA) -->
         <button id="btnOpenScan" type="button"
-          class="w-full p-3 sm:p-3.5 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-600 hover:from-emerald-400 hover:via-teal-400 hover:to-emerald-500 text-white font-bold text-xs sm:text-sm transition-all duration-200 flex items-center justify-between group shadow-lg shadow-emerald-500/20 active:scale-[0.99] border border-emerald-400/40 relative overflow-hidden cursor-pointer">
-          <div class="flex items-center gap-3 text-left">
-            <div class="w-9 h-9 rounded-lg bg-white/20 backdrop-blur-sm flex items-center justify-center text-white border border-white/20">
-              <i class="hn hn-retro-camera-solid text-xl"></i>
+          class="w-full p-3.5 sm:p-4 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-600 hover:from-emerald-400 hover:via-teal-400 hover:to-emerald-500 text-white font-bold text-sm transition-all duration-200 flex items-center justify-between group shadow-lg shadow-emerald-500/20 active:scale-[0.99] border border-emerald-400/40 relative overflow-hidden cursor-pointer">
+          <div class="flex items-center gap-3.5 text-left">
+            <div class="w-10 h-10 rounded-lg bg-white/20 backdrop-blur-sm flex items-center justify-center text-white border border-white/20">
+              <i class="hn hn-retro-camera-solid text-2xl"></i>
             </div>
             <div>
-              <div class="font-bold text-xs sm:text-sm text-white">
+              <div class="font-bold text-sm text-white">
                 Isi Absensi
               </div>
-              <div class="text-[10px] sm:text-[11px] text-emerald-100/90">Scan QR kamera (Masuk & Keluar)</div>
+              <div class="text-[11px] text-emerald-100/90">Scan QR kamera (Masuk & Keluar)</div>
             </div>
           </div>
           <div class="w-7 h-7 rounded-lg bg-white/20 flex items-center justify-center text-white group-hover:translate-x-0.5 transition shadow-sm">
