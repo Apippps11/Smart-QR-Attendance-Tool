@@ -197,6 +197,7 @@
     const inputPassword = document.getElementById('inputPassword');
     const btnTogglePassword = document.getElementById('btnTogglePassword');
     const eyeIcon = document.getElementById('eyeIcon');
+    const checkShowPassword = document.getElementById('checkShowPassword');
     const loginError = document.getElementById('loginError');
     const btnCancelLogin = document.getElementById('btnCancelLogin');
     const btnLogoutAdmin = document.getElementById('btnLogoutAdmin');
@@ -231,6 +232,47 @@
     const inlineBtnIcs = document.getElementById('inlineBtnIcs');
     const btnFinishInline = document.getElementById('btnFinishInline');
 
+    // Helper: Atur visibilitas karakter password
+    function setPasswordVisibility(show) {
+      if (!inputPassword) return;
+      inputPassword.type = show ? 'text' : 'password';
+      const eyeIconOpen = document.getElementById('eyeIconOpen');
+      const eyeIconClosed = document.getElementById('eyeIconClosed');
+      if (eyeIconOpen && eyeIconClosed) {
+        if (show) {
+          eyeIconOpen.classList.add('hidden');
+          eyeIconClosed.classList.remove('hidden');
+        } else {
+          eyeIconOpen.classList.remove('hidden');
+          eyeIconClosed.classList.add('hidden');
+        }
+      }
+      if (btnTogglePassword) {
+        if (show) {
+          btnTogglePassword.classList.add('text-indigo-400', 'bg-indigo-500/20');
+          btnTogglePassword.classList.remove('text-zinc-400');
+          btnTogglePassword.setAttribute('title', 'Sembunyikan Password');
+          btnTogglePassword.setAttribute('aria-label', 'Sembunyikan Password');
+        } else {
+          btnTogglePassword.classList.remove('text-indigo-400', 'bg-indigo-500/20');
+          btnTogglePassword.classList.add('text-zinc-400');
+          btnTogglePassword.setAttribute('title', 'Lihat Password');
+          btnTogglePassword.setAttribute('aria-label', 'Lihat Password');
+        }
+      }
+      if (checkShowPassword) {
+        checkShowPassword.checked = !!show;
+      }
+    }
+
+    // Expose globally so inline onclick handler on button also works seamlessly
+    window.toggleAdminPassword = function() {
+      if (!inputPassword) return;
+      const shouldShow = inputPassword.type === 'password';
+      setPasswordVisibility(shouldShow);
+      try { inputPassword.focus(); } catch (e) {}
+    };
+
     // 1. GATE MODAL ACTIONS
     btnOpenAdminLogin.addEventListener('click', () => {
       gateModal.classList.add('hidden');
@@ -238,24 +280,29 @@
       loginError.classList.add('hidden');
       inputUsername.value = '';
       inputPassword.value = '';
+      setPasswordVisibility(false);
       setTimeout(() => inputUsername.focus(), 150);
     });
 
     btnCancelLogin.addEventListener('click', () => {
       adminLoginModal.classList.add('hidden');
       gateModal.classList.remove('hidden');
+      setPasswordVisibility(false);
     });
 
-    btnTogglePassword.addEventListener('click', () => {
-      if (inputPassword.type === 'password') {
-        inputPassword.type = 'text';
-        eyeIcon.setAttribute('data-lucide', 'eye-off');
-      } else {
-        inputPassword.type = 'password';
-        eyeIcon.setAttribute('data-lucide', 'eye');
-      }
-      lucide.createIcons();
-    });
+    if (btnTogglePassword) {
+      btnTogglePassword.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        window.toggleAdminPassword();
+      });
+    }
+
+    if (checkShowPassword) {
+      checkShowPassword.addEventListener('change', (e) => {
+        setPasswordVisibility(e.target.checked);
+      });
+    }
 
     formAdminLogin.addEventListener('submit', (e) => {
       e.preventDefault();
@@ -263,6 +310,7 @@
       const pass = inputPassword.value;
 
       if (user === ADMIN_USER && pass === ADMIN_PASS) {
+        setPasswordVisibility(false);
         try {
           sessionStorage.setItem(STORAGE_AUTH, 'true');
         } catch (err) {}
