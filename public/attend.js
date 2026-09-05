@@ -348,16 +348,44 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
+  let returnCountdownTimer = null;
+
+  function startReturnCountdown(targetEl, seconds = 30) {
+    if (returnCountdownTimer) clearInterval(returnCountdownTimer);
+    let remaining = seconds;
+    if (targetEl) targetEl.textContent = `Kembali otomatis dalam ${remaining} detik...`;
+    returnCountdownTimer = setInterval(() => {
+      remaining--;
+      if (remaining <= 0) {
+        clearInterval(returnCountdownTimer);
+        window.location.href = 'index.html';
+      } else {
+        if (targetEl) targetEl.textContent = `Kembali otomatis dalam ${remaining} detik...`;
+      }
+    }, 1000);
+  }
+
   function renderSuccessScreen(record) {
     formSection.classList.add('hidden');
-    successSection.classList.remove('hidden');
+    const isKeluar = (record.type || '').toUpperCase() === 'KELUAR';
+    const motivationalSection = document.getElementById('motivationalSection');
 
-    summaryName.textContent = record.name;
-    summaryDate.textContent = `${record.day}, ${record.date}`;
-    summaryTime.textContent = `${record.time} WIB (${record.type || 'MASUK'})`;
-    summaryToken.textContent = record.token;
+    if (isKeluar && motivationalSection) {
+      motivationalSection.classList.remove('hidden');
+      const motivationCountdownText = document.getElementById('motivationCountdownText');
+      startReturnCountdown(motivationCountdownText, 30);
+    } else {
+      successSection.classList.remove('hidden');
+      summaryName.textContent = record.name;
+      summaryDate.textContent = `${record.day}, ${record.date}`;
+      summaryTime.textContent = `${record.time} WIB (${record.type || 'MASUK'})`;
+      summaryToken.textContent = record.token;
+      setupGoogleCalendar(record);
 
-    setupGoogleCalendar(record);
+      const successCountdownText = document.getElementById('successCountdownText');
+      startReturnCountdown(successCountdownText, 30);
+    }
+
     lucide.createIcons();
   }
 

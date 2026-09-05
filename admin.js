@@ -71,12 +71,41 @@
     applyTheme(next);
   }
 
-  // Admin Credentials
-  const ADMIN_USER = 'Admin1118';
-  const ADMIN_PASS = 'AFIFweb18';
+  // Admin Multi-Account Storage & Defaults
+  const STORAGE_ADMIN_ACCOUNTS = 'sqr_admin_accounts';
+  const DEFAULT_ADMIN_ACCOUNTS = [
+    { username: 'Admin1118', password: 'AFIFweb18', role: 'Super Admin', createdAt: '2026-01-01' },
+    { username: 'Admin2', password: 'AFIFweb18', role: 'Admin', createdAt: '2026-01-01' }
+  ];
+
+  function getAdminAccounts() {
+    try {
+      const raw = localStorage.getItem(STORAGE_ADMIN_ACCOUNTS);
+      if (!raw) {
+        localStorage.setItem(STORAGE_ADMIN_ACCOUNTS, JSON.stringify(DEFAULT_ADMIN_ACCOUNTS));
+        return DEFAULT_ADMIN_ACCOUNTS;
+      }
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed) || parsed.length === 0) {
+        localStorage.setItem(STORAGE_ADMIN_ACCOUNTS, JSON.stringify(DEFAULT_ADMIN_ACCOUNTS));
+        return DEFAULT_ADMIN_ACCOUNTS;
+      }
+      return parsed;
+    } catch (e) {
+      return DEFAULT_ADMIN_ACCOUNTS;
+    }
+  }
+
+  function saveAdminAccounts(accounts) {
+    try {
+      localStorage.setItem(STORAGE_ADMIN_ACCOUNTS, JSON.stringify(accounts));
+    } catch (e) {}
+  }
 
   // State
   let currentActiveToken = null;
+  let currentActiveTokenMasuk = null;
+  let currentActiveTokenKeluar = null;
   let currentAttendanceType = 'MASUK'; // 'MASUK' | 'KELUAR'
   let activeSubTab = 'UTAMA'; // 'UTAMA' | 'MASUK' | 'KELUAR'
   let activePeriodFilter = 'ALL'; // 'ALL' | 'TODAY' | 'WEEK' | 'MONTH'
@@ -85,6 +114,7 @@
   let activeScannedToken = null;
   let activeScannedSession = null;
   let adminInitialized = false;
+  let returnCountdownTimer = null;
 
   // Session ID for MQTT Sync
   let adminSessionId = localStorage.getItem(STORAGE_SESSION);
@@ -439,13 +469,16 @@
       const user = inputUsername.value.trim();
       const pass = inputPassword.value;
 
-      if (user === ADMIN_USER && pass === ADMIN_PASS) {
+      const accounts = getAdminAccounts();
+      const matched = accounts.find(a => a.username === user && a.password === pass);
+
+      if (matched) {
         setPasswordVisibility(false);
         try {
           sessionStorage.setItem(STORAGE_AUTH, 'true');
         } catch (err) {}
         checkAuthStatus();
-        showToast('Login Berhasil', 'Akses layar admin terbuka.');
+        showToast('Login Berhasil', `Akses dibuka. Selamat datang ${matched.username}.`);
       } else {
         loginError.classList.remove('hidden');
         inputPassword.value = '';
@@ -844,15 +877,71 @@
       renderInlineSuccess(result.attendance);
     });
 
+    function startReturnCountdown(targetEl, callback, seconds = 30) {
+      if (returnCountdownTimer) clearInterval(returnCountdownTimer);
+      let remaining = seconds;
+      if (targetEl) targetEl.textContent = `Kembali otomatis dalam ${remaining} detik...`;
+      returnCountdownTimer = setInterval(() => {
+        remaining--;
+        if (remaining <= 0) {
+          clearInterval(returnCountdownTimer);
+          returnCountdownTimer = null;
+          callback();
+        } else {
+          if (targetEl) targetEl.textContent = `Kembali otomatis dalam ${remaining} detik...`;
+        }
+      }, 1000);
+    }
+
+    function stopReturnCountdown() {
+      if (returnCountdownTimer) {
+        clearInterval(returnCountdownTimer);
+        returnCountdownTimer = null;
+      }
+    }
+
+    function returnToGate() {
+      stopReturnCountdown();
+      const motivationalModal = document.getElementById('motivationalModal');
+      if (motivationalModal) motivationalModal.classList.add('hidden');
+      if (attendInlineModal) attendInlineModal.classList.add('hidden');
+      if (gateModal) gateModal.classList.remove('hidden');
+      if (inlineFormWrapper) inlineFormWrapper.classList.remove('hidden');
+      if (inlineSuccessWrapper) inlineSuccessWrapper.classList.add('hidden');
+      if (inlineInputName) inlineInputName.value = '';
+      lucide.createIcons();
+    }
+
+    const btnReturnFromMotivation = document.getElementById('btnReturnFromMotivation');
+    if (btnReturnFromMotivation) {
+      btnReturnFromMotivation.addEventListener('click', returnToGate);
+    }
+
+    if (btnFinishInline) {
+      btnFinishInline.addEventListener('click', returnToGate);
+    }
+
     function renderInlineSuccess(record) {
-      inlineFormWrapper.classList.add('hidden');
-      inlineSuccessWrapper.classList.remove('hidden');
+      const isKeluar = (record.type || currentAttendanceType) === 'KELUAR';
+      const motivationalModal = document.getElementById('motivationalModal');
+      const motivationCountdownText = document.getElementById('motivationCountdownText');
+      const inlineCountdownText = document.getElementById('inlineCountdownText');
 
-      inlineSuccName.textContent = record.name;
-      inlineSuccDate.textContent = `${record.day}, ${record.date}`;
-      inlineSuccTime.textContent = `${record.time} WIB (${record.type || 'MASUK'})`;
+      if (isKeluar && motivationalModal) {
+        if (attendInlineModal) attendInlineModal.classList.add('hidden');
+        motivationalModal.classList.remove('hidden');
+        startReturnCountdown(motivationCountdownText, returnToGate, 30);
+      } else {
+        inlineFormWrapper.classList.add('hidden');
+        inlineSuccessWrapper.classList.remove('hidden');
 
-      setupInlineGoogleCalendar(record);
+        inlineSuccName.textContent = record.name;
+        inlineSuccDate.textContent = `${record.day}, ${record.date}`;
+        inlineSuccTime.textContent = `${record.time} WIB (${record.type || 'MASUK'})`;
+
+        setupInlineGoogleCalendar(record);
+        startReturnCountdown(inlineCountdownText, returnToGate, 30);
+      }
       lucide.createIcons();
     }
 
@@ -1044,61 +1133,186 @@
     lucide.createIcons();
   }
 
-  function updateSidebarActive(viewName) {
+  function switchAdminView(viewName) {
+    const viewProjector = document.getElementById('viewProjector');
+    const viewAttendance = document.getElementById('viewAttendance');
+    const viewSettings = document.getElementById('viewSettings');
+
+    const tabBtnProjector = document.getElementById('tabBtnProjector');
+    const tabBtnAttendance = document.getElementById('tabBtnAttendance');
+    const tabBtnSettings = document.getElementById('tabBtnSettings');
+
     const sidebarBtnProjector = document.getElementById('sidebarBtnProjector');
     const sidebarBtnAttendance = document.getElementById('sidebarBtnAttendance');
-    if (sidebarBtnProjector) {
-      if (viewName === 'projector') {
-        sidebarBtnProjector.classList.add('bg-zinc-900/80', 'text-white');
-        sidebarBtnProjector.classList.remove('bg-transparent', 'text-zinc-300');
-      } else {
-        sidebarBtnProjector.classList.remove('bg-zinc-900/80', 'text-white');
-        sidebarBtnProjector.classList.add('bg-transparent', 'text-zinc-300');
-      }
+    const sidebarBtnSettings = document.getElementById('sidebarBtnSettings');
+
+    const adminHeaderTitle = document.getElementById('adminHeaderTitle');
+
+    // 1. Client-side View-Out (Hide inactive sections, show active section)
+    if (viewProjector) {
+      if (viewName === 'projector') viewProjector.classList.remove('hidden');
+      else viewProjector.classList.add('hidden');
     }
-    if (sidebarBtnAttendance) {
+    if (viewAttendance) {
       if (viewName === 'attendance') {
-        sidebarBtnAttendance.classList.add('bg-zinc-900/80', 'text-white');
-        sidebarBtnAttendance.classList.remove('bg-transparent', 'text-zinc-300');
+        viewAttendance.classList.remove('hidden');
+        populateYearFilter();
+        populateDayFilter();
+        loadAttendanceData();
       } else {
-        sidebarBtnAttendance.classList.remove('bg-zinc-900/80', 'text-white');
-        sidebarBtnAttendance.classList.add('bg-transparent', 'text-zinc-300');
+        viewAttendance.classList.add('hidden');
       }
     }
+    if (viewSettings) {
+      if (viewName === 'settings') {
+        viewSettings.classList.remove('hidden');
+        renderAdminAccountsList();
+      } else {
+        viewSettings.classList.add('hidden');
+      }
+    }
+
+    // 2. Dynamic Header Title (Requirement 1)
+    if (adminHeaderTitle) {
+      if (viewName === 'projector') adminHeaderTitle.textContent = 'Administration Dashboard';
+      else if (viewName === 'attendance') adminHeaderTitle.textContent = 'Database Presensi';
+      else if (viewName === 'settings') adminHeaderTitle.textContent = 'Settings';
+    }
+
+    // 3. Desktop Tabs styling sync
+    const desktopTabs = [
+      { el: tabBtnProjector, name: 'projector' },
+      { el: tabBtnAttendance, name: 'attendance' },
+      { el: tabBtnSettings, name: 'settings' }
+    ];
+    desktopTabs.forEach(t => {
+      if (!t.el) return;
+      if (t.name === viewName) {
+        t.el.classList.add('active', 'bg-zinc-800', 'text-white', 'shadow-sm', 'border-zinc-700');
+        t.el.classList.remove('text-zinc-400', 'bg-transparent', 'border-transparent');
+      } else {
+        t.el.classList.remove('active', 'bg-zinc-800', 'text-white', 'shadow-sm', 'border-zinc-700');
+        t.el.classList.add('text-zinc-400', 'bg-transparent', 'border-transparent');
+      }
+    });
+
+    // 4. Sidebar Drawer Buttons styling sync (Requirement 6: identical active/inactive styles)
+    const sidebarBtns = [
+      { el: sidebarBtnProjector, name: 'projector' },
+      { el: sidebarBtnAttendance, name: 'attendance' },
+      { el: sidebarBtnSettings, name: 'settings' }
+    ];
+    sidebarBtns.forEach(b => {
+      if (!b.el) return;
+      if (b.name === viewName) {
+        b.el.classList.add('active', 'bg-zinc-800', 'text-white', 'font-bold', 'border', 'border-zinc-700/60', 'shadow-sm');
+        b.el.classList.remove('text-zinc-300', 'bg-transparent', 'font-medium', 'border-transparent');
+      } else {
+        b.el.classList.remove('active', 'bg-zinc-800', 'text-white', 'font-bold', 'border', 'border-zinc-700/60', 'shadow-sm');
+        b.el.classList.add('text-zinc-300', 'bg-transparent', 'font-medium', 'border-transparent');
+      }
+    });
+
+    // 5. Close sidebar drawer
+    const adminSidebarDrawer = document.getElementById('adminSidebarDrawer');
+    const adminSidebarBackdrop = document.getElementById('adminSidebarBackdrop');
+    if (adminSidebarDrawer) adminSidebarDrawer.classList.add('-translate-x-full');
+    if (adminSidebarBackdrop) adminSidebarBackdrop.classList.add('hidden');
+
+    lucide.createIcons();
   }
 
   function initTabs() {
     const tabBtnProjector = document.getElementById('tabBtnProjector');
     const tabBtnAttendance = document.getElementById('tabBtnAttendance');
+    const tabBtnSettings = document.getElementById('tabBtnSettings');
 
-    const viewProjector = document.getElementById('viewProjector');
-    const viewAttendance = document.getElementById('viewAttendance');
+    if (tabBtnProjector) tabBtnProjector.addEventListener('click', () => switchAdminView('projector'));
+    if (tabBtnAttendance) tabBtnAttendance.addEventListener('click', () => switchAdminView('attendance'));
+    if (tabBtnSettings) tabBtnSettings.addEventListener('click', () => switchAdminView('settings'));
+  }
 
-    const tabs = [
-      { btn: tabBtnProjector, view: viewProjector, name: 'projector' },
-      { btn: tabBtnAttendance, view: viewAttendance, name: 'attendance', onShow: () => { populateYearFilter(); populateDayFilter(); loadAttendanceData(); } }
-    ];
+  function renderAdminAccountsList() {
+    const listEl = document.getElementById('adminAccountsList');
+    if (!listEl) return;
+    const accounts = getAdminAccounts();
+    listEl.innerHTML = accounts.map(acc => {
+      const isSuper = acc.username === 'Admin1118';
+      return `
+        <div class="p-2.5 rounded-xl bg-zinc-900/80 border border-zinc-800 flex items-center justify-between text-xs">
+          <div class="flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full ${isSuper ? 'bg-indigo-400' : 'bg-emerald-400'}"></span>
+            <div>
+              <div class="font-bold text-white font-mono">${escapeHtml(acc.username)}</div>
+              <div class="text-[10px] text-zinc-400">${acc.role || 'Admin'}</div>
+            </div>
+          </div>
+          <div class="flex items-center gap-1.5">
+            ${isSuper ? `
+              <span class="px-2 py-0.5 rounded bg-indigo-500/10 border border-indigo-500/20 text-[10px] font-semibold text-indigo-400">Utama</span>
+            ` : `
+              <button type="button" data-del-user="${escapeHtml(acc.username)}"
+                class="btn-delete-admin px-2 py-1 rounded bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 text-[10px] font-bold transition flex items-center gap-1 cursor-pointer">
+                <i data-lucide="trash-2" class="w-3 h-3"></i>
+                <span>Hapus</span>
+              </button>
+            `}
+          </div>
+        </div>
+      `;
+    }).join('');
 
-    tabs.forEach(t => {
-      if (!t.btn) return;
-      t.btn.addEventListener('click', () => {
-        tabs.forEach(item => {
-          if (!item.btn) return;
-          item.btn.classList.remove('active', 'bg-zinc-800', 'text-white', 'shadow-sm');
-          item.btn.classList.add('text-zinc-400');
-          item.view.classList.add('hidden');
-        });
-
-        t.btn.classList.add('active', 'bg-zinc-800', 'text-white', 'shadow-sm');
-        t.btn.classList.remove('text-zinc-400');
-        t.view.classList.remove('hidden');
-
-        updateSidebarActive(t.name);
-
-        if (t.onShow) t.onShow();
-        lucide.createIcons();
+    listEl.querySelectorAll('.btn-delete-admin').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const u = btn.getAttribute('data-del-user');
+        if (!u || u === 'Admin1118') return;
+        if (confirm(`Hapus akun admin "${u}"?`)) {
+          const current = getAdminAccounts().filter(a => a.username !== u);
+          saveAdminAccounts(current);
+          renderAdminAccountsList();
+          showToast('Admin Dihapus', `Akun "${u}" berhasil dihapus.`);
+        }
       });
     });
+
+    lucide.createIcons();
+  }
+
+  function initAdminAccountManagement() {
+    const formAddAdmin = document.getElementById('formAddAdmin');
+    const newAdminUser = document.getElementById('newAdminUser');
+    const newAdminPass = document.getElementById('newAdminPass');
+
+    if (formAddAdmin) {
+      formAddAdmin.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const username = newAdminUser ? newAdminUser.value.trim() : '';
+        const password = newAdminPass ? newAdminPass.value : '';
+
+        if (!username || !password) {
+          alert('Harap isi username dan password admin.');
+          return;
+        }
+
+        const accounts = getAdminAccounts();
+        if (accounts.some(a => a.username.toLowerCase() === username.toLowerCase())) {
+          alert(`Username "${username}" sudah digunakan. Silakan pilih username lain.`);
+          return;
+        }
+
+        accounts.push({
+          username,
+          password,
+          role: 'Admin',
+          createdAt: getLocalDateString()
+        });
+        saveAdminAccounts(accounts);
+        if (newAdminUser) newAdminUser.value = '';
+        if (newAdminPass) newAdminPass.value = '';
+        renderAdminAccountsList();
+        showToast('Admin Ditambahkan', `Akun "${username}" berhasil didaftarkan.`);
+      });
+    }
   }
 
   function initSidebarAndSettings() {
@@ -1111,13 +1325,8 @@
     const sidebarBtnAttendance = document.getElementById('sidebarBtnAttendance');
     const sidebarBtnSettings = document.getElementById('sidebarBtnSettings');
 
-    const settingsModal = document.getElementById('settingsModal');
-    const btnCloseSettings = document.getElementById('btnCloseSettings');
     const btnAdminThemeToggle = document.getElementById('btnAdminThemeToggle');
     const btnFullscreenSetting = document.getElementById('btnFullscreenSetting');
-
-    const tabBtnProjector = document.getElementById('tabBtnProjector');
-    const tabBtnAttendance = document.getElementById('tabBtnAttendance');
 
     function openSidebar() {
       if (adminSidebarDrawer) adminSidebarDrawer.classList.remove('-translate-x-full');
@@ -1130,66 +1339,20 @@
       if (adminSidebarBackdrop) adminSidebarBackdrop.classList.add('hidden');
     }
 
-    function openSettings() {
-      closeSidebar();
-      if (settingsModal) {
-        settingsModal.classList.remove('hidden');
-        lucide.createIcons();
-      }
-    }
-
-    function closeSettings() {
-      if (settingsModal) settingsModal.classList.add('hidden');
-    }
-
     if (btnOpenSidebar) btnOpenSidebar.addEventListener('click', openSidebar);
     if (btnCloseSidebar) btnCloseSidebar.addEventListener('click', closeSidebar);
     if (adminSidebarBackdrop) adminSidebarBackdrop.addEventListener('click', closeSidebar);
 
     if (sidebarBtnProjector) {
-      sidebarBtnProjector.addEventListener('click', () => {
-        closeSidebar();
-        if (tabBtnProjector) {
-          tabBtnProjector.click();
-        } else {
-          const viewProjector = document.getElementById('viewProjector');
-          const viewAttendance = document.getElementById('viewAttendance');
-          if (viewProjector) viewProjector.classList.remove('hidden');
-          if (viewAttendance) viewAttendance.classList.add('hidden');
-          updateSidebarActive('projector');
-          lucide.createIcons();
-        }
-      });
+      sidebarBtnProjector.addEventListener('click', () => switchAdminView('projector'));
     }
 
     if (sidebarBtnAttendance) {
-      sidebarBtnAttendance.addEventListener('click', () => {
-        closeSidebar();
-        if (tabBtnAttendance) {
-          tabBtnAttendance.click();
-        } else {
-          const viewProjector = document.getElementById('viewProjector');
-          const viewAttendance = document.getElementById('viewAttendance');
-          if (viewProjector) viewProjector.classList.add('hidden');
-          if (viewAttendance) viewAttendance.classList.remove('hidden');
-          populateYearFilter();
-          populateDayFilter();
-          loadAttendanceData();
-          updateSidebarActive('attendance');
-          lucide.createIcons();
-        }
-      });
+      sidebarBtnAttendance.addEventListener('click', () => switchAdminView('attendance'));
     }
 
     if (sidebarBtnSettings) {
-      sidebarBtnSettings.addEventListener('click', openSettings);
-    }
-
-    if (btnCloseSettings) btnCloseSettings.addEventListener('click', closeSettings);
-    if (settingsModal) {
-      settingsModal.addEventListener('click', (e) => {
-        if (e.target === settingsModal) closeSettings();
-      });
+      sidebarBtnSettings.addEventListener('click', () => switchAdminView('settings'));
     }
 
     if (btnAdminThemeToggle) {
@@ -1207,6 +1370,23 @@
         }
       });
     }
+
+    // Dynamic Fullscreen Button Label (Requirement 4)
+    document.addEventListener('fullscreenchange', () => {
+      const isFull = !!document.fullscreenElement;
+      const fullscreenLabel = document.getElementById('fullscreenLabel');
+      const fullscreenIcon = document.getElementById('fullscreenIcon');
+      if (fullscreenLabel) {
+        fullscreenLabel.textContent = isFull ? 'Keluar Layar Penuh' : 'Layar Penuh';
+      }
+      if (fullscreenIcon) {
+        fullscreenIcon.setAttribute('data-lucide', isFull ? 'minimize' : 'maximize');
+        lucide.createIcons();
+      }
+    });
+
+    initAdminAccountManagement();
+    renderAdminAccountsList();
   }
 
   function initSubTabs() {
@@ -1258,73 +1438,16 @@
     }
   }
 
-  // --- FILTER PERIODE WAKTU (TAHUN, BULAN, MINGGUAN, HARIAN, SEMUA) ---
+  // --- FILTER PERIODE WAKTU (TAHUN, BULAN, MINGGUAN 4-WEEKS, HARIAN, SEMUA) ---
   function initPeriodFilters() {
-    const btnPeriodAll = document.getElementById('btnPeriodAll');
-    const btnPeriodToday = document.getElementById('btnPeriodToday');
-    const btnPeriodWeek = document.getElementById('btnPeriodWeek');
-    const btnPeriodMonth = document.getElementById('btnPeriodMonth');
     const selectFilterYear = document.getElementById('selectFilterYear');
     const selectFilterMonth = document.getElementById('selectFilterMonth');
+    const selectFilterWeek = document.getElementById('selectFilterWeek');
     const selectFilterDay = document.getElementById('selectFilterDay');
     const filterSearch = document.getElementById('filterSearch');
     const btnResetFilter = document.getElementById('btnResetFilter');
     const btnExportCsv = document.getElementById('btnExportCsv');
     const btnResetData = document.getElementById('btnResetData');
-
-    function updatePeriodButtons() {
-      [btnPeriodAll, btnPeriodToday, btnPeriodWeek, btnPeriodMonth].forEach(btn => {
-        if (!btn) return;
-        btn.classList.remove('active', 'bg-zinc-800', 'text-white', 'border-zinc-700');
-        btn.classList.add('bg-zinc-950', 'text-zinc-400', 'border-zinc-800');
-      });
-
-      let targetBtn = btnPeriodAll;
-      if (activePeriodFilter === 'TODAY') targetBtn = btnPeriodToday;
-      else if (activePeriodFilter === 'WEEK') targetBtn = btnPeriodWeek;
-      else if (activePeriodFilter === 'MONTH') targetBtn = btnPeriodMonth;
-
-      if (targetBtn && activePeriodFilter !== 'CUSTOM') {
-        targetBtn.classList.add('active', 'bg-zinc-800', 'text-white', 'border-zinc-700');
-        targetBtn.classList.remove('bg-zinc-950', 'text-zinc-400', 'border-zinc-800');
-      }
-    }
-
-    if (btnPeriodAll) {
-      btnPeriodAll.addEventListener('click', () => {
-        activePeriodFilter = 'ALL';
-        if (selectFilterDay) selectFilterDay.value = 'ALL';
-        updatePeriodButtons();
-        loadAttendanceData();
-      });
-    }
-
-    if (btnPeriodToday) {
-      btnPeriodToday.addEventListener('click', () => {
-        activePeriodFilter = 'TODAY';
-        if (selectFilterDay) selectFilterDay.value = 'ALL';
-        updatePeriodButtons();
-        loadAttendanceData();
-      });
-    }
-
-    if (btnPeriodWeek) {
-      btnPeriodWeek.addEventListener('click', () => {
-        activePeriodFilter = 'WEEK';
-        if (selectFilterDay) selectFilterDay.value = 'ALL';
-        updatePeriodButtons();
-        loadAttendanceData();
-      });
-    }
-
-    if (btnPeriodMonth) {
-      btnPeriodMonth.addEventListener('click', () => {
-        activePeriodFilter = 'MONTH';
-        if (selectFilterDay) selectFilterDay.value = 'ALL';
-        updatePeriodButtons();
-        loadAttendanceData();
-      });
-    }
 
     if (selectFilterYear) {
       selectFilterYear.addEventListener('change', () => {
@@ -1339,12 +1462,14 @@
       });
     }
 
+    if (selectFilterWeek) {
+      selectFilterWeek.addEventListener('change', () => {
+        loadAttendanceData();
+      });
+    }
+
     if (selectFilterDay) {
       selectFilterDay.addEventListener('change', () => {
-        if (selectFilterDay.value !== 'ALL') {
-          activePeriodFilter = 'CUSTOM';
-          updatePeriodButtons();
-        }
         loadAttendanceData();
       });
     }
@@ -1357,13 +1482,12 @@
 
     if (btnResetFilter) {
       btnResetFilter.addEventListener('click', () => {
-        activePeriodFilter = 'ALL';
         if (selectFilterYear) selectFilterYear.value = 'ALL';
         updateMonthOptions();
         if (selectFilterMonth) selectFilterMonth.value = 'ALL';
+        if (selectFilterWeek) selectFilterWeek.value = 'ALL';
         if (selectFilterDay) selectFilterDay.value = 'ALL';
         if (filterSearch) filterSearch.value = '';
-        updatePeriodButtons();
         loadAttendanceData();
       });
     }
@@ -1514,6 +1638,7 @@
 
     const selectFilterYear = document.getElementById('selectFilterYear');
     const selectFilterMonth = document.getElementById('selectFilterMonth');
+    const selectFilterWeek = document.getElementById('selectFilterWeek');
     const selectFilterDay = document.getElementById('selectFilterDay');
     const filterSearch = document.getElementById('filterSearch');
 
@@ -1523,13 +1648,9 @@
     const now = new Date();
     const todayStr = getLocalDateString(now);
 
-    // 7 Days ago cutoff
-    const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-    const weekAgoStr = getLocalDateString(weekAgo);
-    const thisMonthPrefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-
     const selectedYear = selectFilterYear ? selectFilterYear.value : 'ALL';
     const selectedMonth = selectFilterMonth ? selectFilterMonth.value : 'ALL';
+    const selectedWeek = selectFilterWeek ? selectFilterWeek.value : 'ALL';
     const selectedDay = selectFilterDay ? selectFilterDay.value : 'ALL';
     const searchTerm = filterSearch ? filterSearch.value.trim().toLowerCase() : '';
 
@@ -1557,35 +1678,34 @@
         if (itemMonth !== selectedMonth) return false;
       }
 
-      // 4. Day Dropdown filter (Full tulisan Tanggal 01 - 31)
+      // 4. Week filter (4 Minggu: W1: 1-7, W2: 8-14, W3: 15-21, W4: 22-end)
+      if (selectedWeek !== 'ALL') {
+        const dayNum = parseInt((item.date || '').split('-')[2], 10);
+        if (!isNaN(dayNum)) {
+          if (selectedWeek === 'W1' && (dayNum < 1 || dayNum > 7)) return false;
+          if (selectedWeek === 'W2' && (dayNum < 8 || dayNum > 14)) return false;
+          if (selectedWeek === 'W3' && (dayNum < 15 || dayNum > 21)) return false;
+          if (selectedWeek === 'W4' && dayNum < 22) return false;
+        }
+      }
+
+      // 5. Day Dropdown filter (Full tulisan Tanggal 01 - 31)
       if (selectedDay !== 'ALL') {
         const itemDay = (item.date || '').split('-')[2];
         if (itemDay !== selectedDay) return false;
       }
 
-      // 5. Quick Period filter (Only when day is 'ALL')
-      if (selectedDay === 'ALL') {
-        if (activePeriodFilter === 'TODAY') {
-          if (item.date !== todayStr) return false;
-        } else if (activePeriodFilter === 'WEEK') {
-          if (item.date < weekAgoStr || item.date > todayStr) return false;
-        } else if (activePeriodFilter === 'MONTH') {
-          if (!item.date.startsWith(thisMonthPrefix)) return false;
-        }
-      }
-
       return true;
     });
 
-    // Update Metrics
+    // Update Metrics (Requirement 8)
     const masukCount = filtered.filter(a => a.type === 'MASUK' || !a.type).length;
     const keluarCount = filtered.filter(a => a.type === 'KELUAR').length;
-    const validAll = all.filter(a => !a.date || a.date >= '2026-08-01');
 
     if (metricFilteredCount) metricFilteredCount.textContent = filtered.length;
     if (metricMasukCount) metricMasukCount.textContent = masukCount;
     if (metricKeluarCount) metricKeluarCount.textContent = keluarCount;
-    if (metricTotalAllTime) metricTotalAllTime.textContent = validAll.length;
+    if (metricTotalAllTime) metricTotalAllTime.textContent = filtered.length;
 
     // Render Table Based on Active SubTab with clean empty states
     if (activeSubTab === 'MASUK') {
