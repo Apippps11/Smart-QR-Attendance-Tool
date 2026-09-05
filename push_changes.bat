@@ -1,5 +1,5 @@
 @echo off
 cd /d "c:\Users\ACER\Documents\Smart QR Attendance Tool"
 git add .
-git commit -m "feat: instant client-side QR render, light/dark theme system, admin hamburger sidebar & settings, UI cleanup"
+git commit -m "fix(ui): compact gateModal box, monochrome theme toggle in top corner, elegant light mode attendance button"
 git push origin main -v

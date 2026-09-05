@@ -36,7 +36,7 @@
     const gateThemeIcon = document.getElementById('gateThemeIcon');
     const gateThemeLabel = document.getElementById('gateThemeLabel');
     if (gateThemeIcon) {
-      gateThemeIcon.className = isLight ? 'hn hn-moon-solid text-indigo-500 text-sm' : 'hn hn-sun-solid text-amber-400 text-sm';
+      gateThemeIcon.className = isLight ? 'hn hn-moon-solid text-zinc-800 text-sm' : 'hn hn-sun-solid text-white text-sm';
     }
     if (gateThemeLabel) {
       gateThemeLabel.textContent = isLight ? 'Dark' : 'Light';
@@ -46,7 +46,7 @@
     const adminThemeIcon = document.getElementById('adminThemeIcon');
     const adminThemeLabel = document.getElementById('adminThemeLabel');
     if (adminThemeIcon) {
-      adminThemeIcon.className = isLight ? 'hn hn-moon-solid text-indigo-500 text-xs' : 'hn hn-sun-solid text-amber-400 text-xs';
+      adminThemeIcon.className = isLight ? 'hn hn-moon-solid text-zinc-800 text-xs' : 'hn hn-sun-solid text-white text-xs';
     }
     if (adminThemeLabel) {
       adminThemeLabel.textContent = isLight ? 'Dark Mode' : 'Light Mode';
