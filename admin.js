@@ -18,6 +18,58 @@
   const STORAGE_ATTENDANCES = 'sqr_attendances';
   const STORAGE_SESSION = 'sqr_admin_session_id';
   const STORAGE_AUTH = 'sqr_admin_authenticated';
+  const STORAGE_THEME = 'sqr_theme';
+
+  // --- THEME MANAGEMENT (LIGHT & DARK) ---
+  function applyTheme(theme) {
+    const isLight = theme === 'light';
+    const root = document.documentElement;
+    if (isLight) {
+      root.classList.remove('dark');
+      root.classList.add('light');
+    } else {
+      root.classList.remove('light');
+      root.classList.add('dark');
+    }
+
+    // Update Gate theme button UI
+    const gateThemeIcon = document.getElementById('gateThemeIcon');
+    const gateThemeLabel = document.getElementById('gateThemeLabel');
+    if (gateThemeIcon) {
+      gateThemeIcon.className = isLight ? 'hn hn-moon-solid text-indigo-500 text-sm' : 'hn hn-sun-solid text-amber-400 text-sm';
+    }
+    if (gateThemeLabel) {
+      gateThemeLabel.textContent = isLight ? 'Dark' : 'Light';
+    }
+
+    // Update Admin theme button UI (inside Settings)
+    const adminThemeIcon = document.getElementById('adminThemeIcon');
+    const adminThemeLabel = document.getElementById('adminThemeLabel');
+    if (adminThemeIcon) {
+      adminThemeIcon.className = isLight ? 'hn hn-moon-solid text-indigo-500 text-xs' : 'hn hn-sun-solid text-amber-400 text-xs';
+    }
+    if (adminThemeLabel) {
+      adminThemeLabel.textContent = isLight ? 'Dark Mode' : 'Light Mode';
+    }
+
+    try {
+      localStorage.setItem(STORAGE_THEME, isLight ? 'light' : 'dark');
+    } catch (e) {}
+  }
+
+  function getSavedTheme() {
+    try {
+      return localStorage.getItem(STORAGE_THEME) || 'dark';
+    } catch (e) {
+      return 'dark';
+    }
+  }
+
+  function toggleTheme() {
+    const current = getSavedTheme();
+    const next = current === 'light' ? 'dark' : 'light';
+    applyTheme(next);
+  }
 
   // Admin Credentials
   const ADMIN_USER = 'Admin1118';
@@ -160,6 +212,12 @@
       if (absensiChoiceModal) absensiChoiceModal.classList.add('hidden');
       if (cameraScanModal) cameraScanModal.classList.add('hidden');
       if (attendInlineModal) attendInlineModal.classList.add('hidden');
+      const settingsModal = document.getElementById('settingsModal');
+      if (settingsModal) settingsModal.classList.add('hidden');
+      const adminSidebarDrawer = document.getElementById('adminSidebarDrawer');
+      if (adminSidebarDrawer) adminSidebarDrawer.classList.add('-translate-x-full');
+      const adminSidebarBackdrop = document.getElementById('adminSidebarBackdrop');
+      if (adminSidebarBackdrop) adminSidebarBackdrop.classList.add('hidden');
     }
   }
 
@@ -170,6 +228,13 @@
 
   // --- DOM READY INITIALIZER ---
   document.addEventListener('DOMContentLoaded', () => {
+    // Apply saved theme immediately
+    applyTheme(getSavedTheme());
+    const btnThemeToggleGate = document.getElementById('btnThemeToggleGate');
+    if (btnThemeToggleGate) {
+      btnThemeToggleGate.addEventListener('click', toggleTheme);
+    }
+
     // Run auth check immediately
     checkAuthStatus();
 
@@ -388,14 +453,22 @@
       }
     });
 
-    btnLogoutAdmin.addEventListener('click', () => {
-      if (confirm('Kunci layar admin sekarang?')) {
-        try {
-          sessionStorage.removeItem(STORAGE_AUTH);
-        } catch (err) {}
-        checkAuthStatus();
-      }
-    });
+    if (btnLogoutAdmin) {
+      btnLogoutAdmin.addEventListener('click', () => {
+        if (confirm('Keluar dari sesi admin (Log Out)?')) {
+          try {
+            sessionStorage.removeItem(STORAGE_AUTH);
+          } catch (err) {}
+          const settingsModal = document.getElementById('settingsModal');
+          if (settingsModal) settingsModal.classList.add('hidden');
+          const adminSidebarDrawer = document.getElementById('adminSidebarDrawer');
+          if (adminSidebarDrawer) adminSidebarDrawer.classList.add('-translate-x-full');
+          const adminSidebarBackdrop = document.getElementById('adminSidebarBackdrop');
+          if (adminSidebarBackdrop) adminSidebarBackdrop.classList.add('hidden');
+          checkAuthStatus();
+        }
+      });
+    }
 
     // 2. ABSENSI CHOICE ACTIONS
     btnOpenScan.addEventListener('click', () => {
@@ -961,6 +1034,7 @@
     initTabs();
     initSubTabs();
     initPeriodFilters();
+    initSidebarAndSettings();
     initClock();
     initCloudMqtt();
     bootAdminQr();
@@ -968,6 +1042,29 @@
     populateDayFilter();
     loadAttendanceData();
     lucide.createIcons();
+  }
+
+  function updateSidebarActive(viewName) {
+    const sidebarBtnProjector = document.getElementById('sidebarBtnProjector');
+    const sidebarBtnAttendance = document.getElementById('sidebarBtnAttendance');
+    if (sidebarBtnProjector) {
+      if (viewName === 'projector') {
+        sidebarBtnProjector.classList.add('bg-zinc-900/80', 'text-white');
+        sidebarBtnProjector.classList.remove('bg-transparent', 'text-zinc-300');
+      } else {
+        sidebarBtnProjector.classList.remove('bg-zinc-900/80', 'text-white');
+        sidebarBtnProjector.classList.add('bg-transparent', 'text-zinc-300');
+      }
+    }
+    if (sidebarBtnAttendance) {
+      if (viewName === 'attendance') {
+        sidebarBtnAttendance.classList.add('bg-zinc-900/80', 'text-white');
+        sidebarBtnAttendance.classList.remove('bg-transparent', 'text-zinc-300');
+      } else {
+        sidebarBtnAttendance.classList.remove('bg-zinc-900/80', 'text-white');
+        sidebarBtnAttendance.classList.add('bg-transparent', 'text-zinc-300');
+      }
+    }
   }
 
   function initTabs() {
@@ -978,8 +1075,8 @@
     const viewAttendance = document.getElementById('viewAttendance');
 
     const tabs = [
-      { btn: tabBtnProjector, view: viewProjector },
-      { btn: tabBtnAttendance, view: viewAttendance, onShow: () => { populateYearFilter(); populateDayFilter(); loadAttendanceData(); } }
+      { btn: tabBtnProjector, view: viewProjector, name: 'projector' },
+      { btn: tabBtnAttendance, view: viewAttendance, name: 'attendance', onShow: () => { populateYearFilter(); populateDayFilter(); loadAttendanceData(); } }
     ];
 
     tabs.forEach(t => {
@@ -996,10 +1093,120 @@
         t.btn.classList.remove('text-zinc-400');
         t.view.classList.remove('hidden');
 
+        updateSidebarActive(t.name);
+
         if (t.onShow) t.onShow();
         lucide.createIcons();
       });
     });
+  }
+
+  function initSidebarAndSettings() {
+    const btnOpenSidebar = document.getElementById('btnOpenSidebar');
+    const btnCloseSidebar = document.getElementById('btnCloseSidebar');
+    const adminSidebarDrawer = document.getElementById('adminSidebarDrawer');
+    const adminSidebarBackdrop = document.getElementById('adminSidebarBackdrop');
+
+    const sidebarBtnProjector = document.getElementById('sidebarBtnProjector');
+    const sidebarBtnAttendance = document.getElementById('sidebarBtnAttendance');
+    const sidebarBtnSettings = document.getElementById('sidebarBtnSettings');
+
+    const settingsModal = document.getElementById('settingsModal');
+    const btnCloseSettings = document.getElementById('btnCloseSettings');
+    const btnAdminThemeToggle = document.getElementById('btnAdminThemeToggle');
+    const btnFullscreenSetting = document.getElementById('btnFullscreenSetting');
+
+    const tabBtnProjector = document.getElementById('tabBtnProjector');
+    const tabBtnAttendance = document.getElementById('tabBtnAttendance');
+
+    function openSidebar() {
+      if (adminSidebarDrawer) adminSidebarDrawer.classList.remove('-translate-x-full');
+      if (adminSidebarBackdrop) adminSidebarBackdrop.classList.remove('hidden');
+      lucide.createIcons();
+    }
+
+    function closeSidebar() {
+      if (adminSidebarDrawer) adminSidebarDrawer.classList.add('-translate-x-full');
+      if (adminSidebarBackdrop) adminSidebarBackdrop.classList.add('hidden');
+    }
+
+    function openSettings() {
+      closeSidebar();
+      if (settingsModal) {
+        settingsModal.classList.remove('hidden');
+        lucide.createIcons();
+      }
+    }
+
+    function closeSettings() {
+      if (settingsModal) settingsModal.classList.add('hidden');
+    }
+
+    if (btnOpenSidebar) btnOpenSidebar.addEventListener('click', openSidebar);
+    if (btnCloseSidebar) btnCloseSidebar.addEventListener('click', closeSidebar);
+    if (adminSidebarBackdrop) adminSidebarBackdrop.addEventListener('click', closeSidebar);
+
+    if (sidebarBtnProjector) {
+      sidebarBtnProjector.addEventListener('click', () => {
+        closeSidebar();
+        if (tabBtnProjector) {
+          tabBtnProjector.click();
+        } else {
+          const viewProjector = document.getElementById('viewProjector');
+          const viewAttendance = document.getElementById('viewAttendance');
+          if (viewProjector) viewProjector.classList.remove('hidden');
+          if (viewAttendance) viewAttendance.classList.add('hidden');
+          updateSidebarActive('projector');
+          lucide.createIcons();
+        }
+      });
+    }
+
+    if (sidebarBtnAttendance) {
+      sidebarBtnAttendance.addEventListener('click', () => {
+        closeSidebar();
+        if (tabBtnAttendance) {
+          tabBtnAttendance.click();
+        } else {
+          const viewProjector = document.getElementById('viewProjector');
+          const viewAttendance = document.getElementById('viewAttendance');
+          if (viewProjector) viewProjector.classList.add('hidden');
+          if (viewAttendance) viewAttendance.classList.remove('hidden');
+          populateYearFilter();
+          populateDayFilter();
+          loadAttendanceData();
+          updateSidebarActive('attendance');
+          lucide.createIcons();
+        }
+      });
+    }
+
+    if (sidebarBtnSettings) {
+      sidebarBtnSettings.addEventListener('click', openSettings);
+    }
+
+    if (btnCloseSettings) btnCloseSettings.addEventListener('click', closeSettings);
+    if (settingsModal) {
+      settingsModal.addEventListener('click', (e) => {
+        if (e.target === settingsModal) closeSettings();
+      });
+    }
+
+    if (btnAdminThemeToggle) {
+      btnAdminThemeToggle.addEventListener('click', () => {
+        toggleTheme();
+      });
+    }
+
+    if (btnFullscreenSetting) {
+      btnFullscreenSetting.addEventListener('click', () => {
+        if (!document.fullscreenElement) {
+          document.documentElement.requestFullscreen().catch(() => {});
+        } else {
+          document.exitFullscreen().catch(() => {});
+        }
+      });
+    }
   }
 
   function initSubTabs() {
@@ -1714,33 +1921,51 @@
     const attendUrl = `${currentUrl.origin}${basePath}?token=${encodeURIComponent(token)}&type=${typeParam}&session=${encodeURIComponent(adminSessionId)}`;
     if (mobileAccessUrl) mobileAccessUrl.textContent = attendUrl;
 
-    if (qrOverlayLoading) qrOverlayLoading.classList.remove('hidden');
-    if (qrImage) qrImage.classList.remove('hidden');
-    if (qrCanvasContainer) qrCanvasContainer.classList.add('hidden');
+    // 1. PRIMARY: Synchronous client-side QRCode rendering via qrcode.min.js (works offline, zero spinner delay)
+    let renderedLocally = false;
+    if (typeof QRCode !== 'undefined' && qrCanvasContainer) {
+      try {
+        qrCanvasContainer.innerHTML = '';
+        new QRCode(qrCanvasContainer, {
+          text: attendUrl,
+          width: 240,
+          height: 240,
+          colorDark: '#090a0f',
+          colorLight: '#ffffff',
+          correctLevel: QRCode.CorrectLevel.M
+        });
+        qrCanvasContainer.classList.remove('hidden');
+        if (qrImage) qrImage.classList.add('hidden');
+        if (qrOverlayLoading) qrOverlayLoading.classList.add('hidden');
+        renderedLocally = true;
+      } catch (err) {
+        console.warn('QRCode JS local render error:', err);
+      }
+    }
 
-    const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&margin=10&data=${encodeURIComponent(attendUrl)}`;
-    
-    if (qrImage) {
-      qrImage.src = qrApiUrl;
-      qrImage.onload = () => {
+    // 2. FALLBACK: Network QR API with strict 1.5s timeout if QRCode library is absent
+    if (!renderedLocally) {
+      if (qrCanvasContainer) qrCanvasContainer.classList.add('hidden');
+      if (qrImage) {
+        qrImage.classList.remove('hidden');
+        if (qrOverlayLoading) qrOverlayLoading.classList.remove('hidden');
+        
+        const safetyTimer = setTimeout(() => {
+          if (qrOverlayLoading) qrOverlayLoading.classList.add('hidden');
+        }, 1500);
+
+        qrImage.onload = () => {
+          clearTimeout(safetyTimer);
+          if (qrOverlayLoading) qrOverlayLoading.classList.add('hidden');
+        };
+        qrImage.onerror = () => {
+          clearTimeout(safetyTimer);
+          if (qrOverlayLoading) qrOverlayLoading.classList.add('hidden');
+        };
+        qrImage.src = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&margin=10&data=${encodeURIComponent(attendUrl)}`;
+      } else {
         if (qrOverlayLoading) qrOverlayLoading.classList.add('hidden');
-      };
-      qrImage.onerror = () => {
-        if (typeof QRCode !== 'undefined' && qrCanvasContainer) {
-          qrCanvasContainer.innerHTML = '';
-          new QRCode(qrCanvasContainer, {
-            text: attendUrl,
-            width: 250,
-            height: 250,
-            colorDark: '#090a0f',
-            colorLight: '#ffffff',
-            correctLevel: QRCode.CorrectLevel.M
-          });
-          qrImage.classList.add('hidden');
-          qrCanvasContainer.classList.remove('hidden');
-        }
-        if (qrOverlayLoading) qrOverlayLoading.classList.add('hidden');
-      };
+      }
     }
   }
 
@@ -1781,8 +2006,6 @@
 
     const btnRefreshQrMasuk = document.getElementById('btnRefreshQrMasuk');
     const btnRefreshQrKeluar = document.getElementById('btnRefreshQrKeluar');
-    const btnRefreshQr = document.getElementById('btnRefreshQr');
-    const btnFullscreen = document.getElementById('btnFullscreen');
 
     const tokens = getStoredTokens();
     const activeMasuk = tokens.find(t => t.status === 'ACTIVE' && (t.type === 'MASUK' || !t.type));
@@ -1826,24 +2049,6 @@
       btnRefreshQrKeluar.addEventListener('click', () => {
         createNewActiveToken('KELUAR');
         showToast('QR Keluar Diperbarui', 'Token QR Keluar baru telah aktif.');
-      });
-    }
-
-    if (btnRefreshQr) {
-      btnRefreshQr.addEventListener('click', () => {
-        createNewActiveToken('MASUK');
-        createNewActiveToken('KELUAR');
-        showToast('Semua QR Diperbarui', 'Token QR Masuk & Keluar baru telah aktif.');
-      });
-    }
-
-    if (btnFullscreen) {
-      btnFullscreen.addEventListener('click', () => {
-        if (!document.fullscreenElement) {
-          document.documentElement.requestFullscreen().catch(() => {});
-        } else {
-          document.exitFullscreen().catch(() => {});
-        }
       });
     }
   }

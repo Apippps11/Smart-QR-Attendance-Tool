@@ -131,7 +131,123 @@
     ::-webkit-scrollbar-thumb:hover {
       background: #3f3f46;
     }
+
+    /* ========================================= */
+    /* LIGHT MODE ADAPTATIONS                    */
+    /* ========================================= */
+    html.light {
+      --bg-main: #f8fafc;
+      --bg-panel: #ffffff;
+      --border-subtle: #e2e8f0;
+      --text-muted: #64748b;
+    }
+    html.light body {
+      background-color: #f8fafc !important;
+      background-image: 
+        radial-gradient(ellipse 70% 50% at 50% -10%, rgba(99, 102, 241, 0.08), transparent 60%),
+        radial-gradient(ellipse 60% 40% at 90% 100%, rgba(16, 185, 129, 0.05), transparent 60%) !important;
+      color: #0f172a !important;
+    }
+    html.light .pixel-box {
+      background: #ffffff !important;
+      border-color: #e2e8f0 !important;
+      box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.07), 0 0 0 1px rgba(0, 0, 0, 0.04) !important;
+      color: #0f172a !important;
+    }
+    html.light .pixel-corner-tl, html.light .pixel-corner-tr {
+      border-color: #6366f1 !important;
+    }
+    html.light .pixel-corner-bl, html.light .pixel-corner-br {
+      border-color: #10b981 !important;
+    }
+    html.light #gateModal,
+    html.light #absensiChoiceModal,
+    html.light #adminLoginModal,
+    html.light #cameraScanModal,
+    html.light #scanDisclaimerModal,
+    html.light #attendInlineModal,
+    html.light #settingsModal {
+      background-color: rgba(15, 23, 42, 0.6) !important;
+    }
+    html.light .bg-\[\#11131a\],
+    html.light .bg-\[\#121624\],
+    html.light .bg-\[\#161a28\],
+    html.light .bg-\[\#151928\],
+    html.light .bg-\[\#0c0f1d\],
+    html.light .bg-\[\#0e111a\],
+    html.light .bg-zinc-950,
+    html.light .bg-zinc-900 {
+      background-color: #f8fafc !important;
+    }
+    html.light .text-white {
+      color: #0f172a !important;
+    }
+    html.light .text-zinc-200,
+    html.light .text-zinc-300 {
+      color: #1e293b !important;
+    }
+    html.light .text-zinc-400 {
+      color: #475569 !important;
+    }
+    html.light .text-zinc-500 {
+      color: #64748b !important;
+    }
+    html.light .border-zinc-800,
+    html.light .border-zinc-900,
+    html.light .border-\[\#1c2130\],
+    html.light .border-\[\#1e2333\],
+    html.light .border-white\/10,
+    html.light .border-white\/\[0\.06\] {
+      border-color: #e2e8f0 !important;
+    }
+    html.light header {
+      background-color: #ffffff !important;
+      border-color: #e2e8f0 !important;
+    }
+    html.light footer {
+      background-color: #f1f5f9 !important;
+      border-color: #e2e8f0 !important;
+    }
+    html.light input,
+    html.light select {
+      background-color: #ffffff !important;
+      border-color: #cbd5e1 !important;
+      color: #0f172a !important;
+    }
+    html.light input::placeholder {
+      color: #94a3b8 !important;
+    }
+    html.light .tab-btn.active {
+      background-color: #e2e8f0 !important;
+      color: #0f172a !important;
+    }
+    html.light #adminSidebarDrawer {
+      background-color: #ffffff !important;
+      border-color: #e2e8f0 !important;
+      color: #0f172a !important;
+    }
+    html.light ::-webkit-scrollbar-track {
+      background: #f1f5f9;
+    }
+    html.light ::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+    }
   </style>
+
+  <script>
+    (function() {
+      try {
+        var t = localStorage.getItem('sqr_theme') || 'dark';
+        if (t === 'light') {
+          document.documentElement.classList.add('light');
+          document.documentElement.classList.remove('dark');
+        } else {
+          document.documentElement.classList.add('dark');
+          document.documentElement.classList.remove('light');
+        }
+      } catch (e) {}
+    })();
+  </script>
 </head>
 <body class="min-h-screen flex flex-col antialiased selection:bg-zinc-700 selection:text-white">
 
@@ -149,6 +265,15 @@
 
       <!-- Ambient Card Highlight -->
       <div class="absolute -top-24 left-1/2 -translate-x-1/2 w-48 h-48 bg-indigo-500/15 rounded-full blur-3xl pointer-events-none"></div>
+
+      <!-- Theme Toggle Button (Gate Modal Top Right) -->
+      <div class="flex justify-end -mt-2 -mr-2 relative z-20">
+        <button id="btnThemeToggleGate" type="button" title="Ganti Tema (Light / Dark)" aria-label="Ganti Tema (Light / Dark)"
+          class="px-2.5 py-1.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.12] border border-white/10 text-zinc-300 hover:text-white transition flex items-center gap-1.5 text-xs font-semibold select-none active:scale-95 cursor-pointer">
+          <i id="gateThemeIcon" class="hn hn-sun-solid text-amber-400 text-sm"></i>
+          <span id="gateThemeLabel">Tema</span>
+        </button>
+      </div>
 
       <!-- Distinctive Pixel Emblem (Presisi, Simetris & Bayangan Rapi) -->
       <div class="relative w-16 h-16 mx-auto flex items-center justify-center">
@@ -651,25 +776,19 @@
     <header class="border-b border-[#1c2130] bg-[#11131a] sticky top-0 z-40">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 flex flex-wrap items-center justify-between gap-4">
         
-        <!-- Brand -->
+        <!-- Brand & Hamburger Sidebar Trigger -->
         <div class="flex items-center space-x-3">
-          <div class="w-9 h-9 rounded-lg bg-zinc-900 border border-zinc-800 flex items-center justify-center text-indigo-400">
-            <i class="hn hn-laptop-code-solid text-lg"></i>
-          </div>
+          <button id="btnOpenSidebar" type="button" title="Buka Menu Navigasi" aria-label="Buka Menu Navigasi"
+            class="w-9 h-9 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 flex items-center justify-center text-zinc-300 hover:text-white transition cursor-pointer active:scale-95">
+            <i data-lucide="menu" class="w-5 h-5"></i>
+          </button>
           <div>
-            <div class="flex items-center gap-2">
-              <h1 class="font-bold text-sm sm:text-base text-white">Smart Attendance Panel</h1>
-              <span id="syncBadge" class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                <span id="syncBadgeText">Sync Aktif</span>
-              </span>
-            </div>
-            <p class="text-[11px] text-zinc-400">Presensi QR Dinamis &bull; Kunci Tanggal Regional</p>
+            <h1 class="font-bold text-sm sm:text-base text-white tracking-tight">Administration Dashboard</h1>
           </div>
         </div>
 
-        <!-- Navigation Tabs -->
-        <nav class="flex items-center bg-zinc-950 p-1 rounded-xl border border-zinc-800 text-xs font-semibold">
+        <!-- Navigation Tabs (Middle) -->
+        <nav class="hidden md:flex items-center bg-zinc-950 p-1 rounded-xl border border-zinc-800 text-xs font-semibold">
           <button id="tabBtnProjector" class="tab-btn active px-3.5 py-1.5 rounded-lg transition flex items-center gap-2 bg-zinc-800 text-white shadow-sm">
             <i data-lucide="projector" class="w-3.5 h-3.5"></i>
             <span>Layar QR</span>
@@ -680,21 +799,145 @@
           </button>
         </nav>
 
-        <!-- Right Controls (Clock & Logout) -->
+        <!-- Right Controls: Clean Clock Only -->
         <div class="flex items-center space-x-3">
-          <div class="hidden lg:block text-right">
+          <div class="text-right">
             <div id="liveClock" class="font-mono text-xs font-semibold text-zinc-200">--:--:--</div>
             <div id="liveDate" class="text-[10px] text-zinc-400">--</div>
           </div>
-          <button id="btnLogoutAdmin" title="Kunci & Keluar Admin"
-            class="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 text-xs font-medium rounded-lg transition flex items-center gap-1.5">
-            <i class="hn hn-lock-solid text-zinc-400 text-xs"></i>
-            <span>Kunci Layar</span>
-          </button>
         </div>
 
       </div>
     </header>
+
+    <!-- Admin Sidebar Drawer (Slide-over from Left) -->
+    <div id="adminSidebarBackdrop" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm hidden transition-opacity"></div>
+    <aside id="adminSidebarDrawer"
+      class="fixed top-0 left-0 bottom-0 w-72 max-w-[85vw] z-50 bg-[#0e111a] border-r border-[#1e2333] shadow-2xl transform -translate-x-full transition-transform duration-300 flex flex-col justify-between p-5">
+      
+      <div>
+        <!-- Sidebar Header -->
+        <div class="flex items-center justify-between pb-4 border-b border-zinc-800/80 mb-5">
+          <div class="flex items-center gap-2.5">
+            <div class="w-8 h-8 rounded-lg bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-center text-indigo-400">
+              <i class="hn hn-laptop-code-solid text-base"></i>
+            </div>
+            <div>
+              <div class="font-bold text-sm text-white">Menu Navigasi</div>
+              <div class="text-[10px] text-zinc-400 font-mono">Administration</div>
+            </div>
+          </div>
+          <button id="btnCloseSidebar" type="button" title="Tutup Menu"
+            class="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-white/10 transition">
+            <i data-lucide="x" class="w-5 h-5"></i>
+          </button>
+        </div>
+
+        <!-- Sidebar Navigation Items (3 items: Administration Dashboard, Database, Settings) -->
+        <nav class="space-y-1.5">
+          <!-- Item 1: Administration Dashboard -->
+          <button id="sidebarBtnProjector" type="button"
+            class="sidebar-nav-item w-full p-3 rounded-xl bg-zinc-900/80 hover:bg-zinc-800/80 border border-zinc-800 text-left text-xs font-semibold text-white transition flex items-center justify-between group cursor-pointer">
+            <div class="flex items-center gap-3">
+              <i data-lucide="monitor" class="w-4 h-4 text-indigo-400"></i>
+              <span>Administration Dashboard</span>
+            </div>
+            <i data-lucide="chevron-right" class="w-4 h-4 text-zinc-500 group-hover:translate-x-0.5 transition"></i>
+          </button>
+
+          <!-- Item 2: Database -->
+          <button id="sidebarBtnAttendance" type="button"
+            class="sidebar-nav-item w-full p-3 rounded-xl bg-transparent hover:bg-zinc-800/60 border border-transparent hover:border-zinc-800 text-left text-xs font-semibold text-zinc-300 hover:text-white transition flex items-center justify-between group cursor-pointer">
+            <div class="flex items-center gap-3">
+              <i data-lucide="database" class="w-4 h-4 text-emerald-400"></i>
+              <span>Database</span>
+            </div>
+            <i data-lucide="chevron-right" class="w-4 h-4 text-zinc-500 group-hover:translate-x-0.5 transition"></i>
+          </button>
+
+          <!-- Item 3: Settings -->
+          <button id="sidebarBtnSettings" type="button"
+            class="sidebar-nav-item w-full p-3 rounded-xl bg-transparent hover:bg-zinc-800/60 border border-transparent hover:border-zinc-800 text-left text-xs font-semibold text-zinc-300 hover:text-white transition flex items-center justify-between group cursor-pointer">
+            <div class="flex items-center gap-3">
+              <i data-lucide="settings" class="w-4 h-4 text-amber-400"></i>
+              <span>Settings</span>
+            </div>
+            <i data-lucide="chevron-right" class="w-4 h-4 text-zinc-500 group-hover:translate-x-0.5 transition"></i>
+          </button>
+        </nav>
+      </div>
+
+      <!-- Sidebar Footer -->
+      <div class="pt-4 border-t border-zinc-800/80 text-[11px] text-zinc-500">
+        <div class="flex items-center justify-between">
+          <span>Attendance System</span>
+          <span class="font-mono text-[10px]">v2.5</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Settings Modal (Opened from Sidebar) -->
+    <div id="settingsModal" class="fixed inset-0 z-50 bg-[#090b10]/92 backdrop-blur-md flex items-center justify-center p-4 hidden">
+      <div class="pixel-box rounded-2xl p-6 sm:p-7 max-w-sm w-full space-y-5 relative overflow-hidden">
+        <!-- Pixel Corner Accents -->
+        <div class="pixel-corner-tl"></div>
+        <div class="pixel-corner-tr"></div>
+        <div class="pixel-corner-bl"></div>
+        <div class="pixel-corner-br"></div>
+
+        <!-- Modal Header -->
+        <div class="flex items-center justify-between pb-3 border-b border-zinc-800">
+          <div class="flex items-center gap-2.5">
+            <div class="w-8 h-8 rounded-lg bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400">
+              <i data-lucide="settings" class="w-4 h-4"></i>
+            </div>
+            <h3 class="font-bold text-sm sm:text-base text-white">Settings</h3>
+          </div>
+          <button id="btnCloseSettings" type="button" class="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-white/10 transition">
+            <i data-lucide="x" class="w-5 h-5"></i>
+          </button>
+        </div>
+
+        <!-- Settings Options -->
+        <div class="space-y-3.5">
+          <!-- 1. Tema Tampilan (Light & Dark Mode) -->
+          <div class="p-3.5 rounded-xl bg-zinc-950/70 border border-zinc-800 flex items-center justify-between gap-3">
+            <div>
+              <div class="text-xs font-bold text-white">Tema Tampilan</div>
+              <div class="text-[10px] text-zinc-400 mt-0.5">Mode terang atau gelap admin</div>
+            </div>
+            <button id="btnAdminThemeToggle" type="button"
+              class="px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-xs font-semibold text-zinc-200 transition flex items-center gap-1.5 active:scale-95 cursor-pointer">
+              <i id="adminThemeIcon" class="hn hn-sun-solid text-amber-400 text-xs"></i>
+              <span id="adminThemeLabel">Tema</span>
+            </button>
+          </div>
+
+          <!-- 2. Mode Layar Penuh (Fullscreen) -->
+          <div class="p-3.5 rounded-xl bg-zinc-950/70 border border-zinc-800 flex items-center justify-between gap-3">
+            <div>
+              <div class="text-xs font-bold text-white">Layar Penuh</div>
+              <div class="text-[10px] text-zinc-400 mt-0.5">Mode proyektor tanpa bilah browser</div>
+            </div>
+            <button id="btnFullscreenSetting" type="button"
+              class="px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-xs font-semibold text-zinc-200 transition flex items-center gap-1.5 active:scale-95 cursor-pointer">
+              <i data-lucide="maximize" class="w-3.5 h-3.5 text-indigo-400"></i>
+              <span>Layar Penuh</span>
+            </button>
+          </div>
+
+          <!-- 3. Tombol Log Out (Menggantikan Kunci Layar) -->
+          <div class="pt-2 border-t border-zinc-800/80">
+            <button id="btnLogoutAdmin" type="button"
+              class="w-full py-3 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-400 hover:text-rose-300 text-xs font-bold transition flex items-center justify-center gap-2 active:scale-98 shadow-sm cursor-pointer">
+              <i data-lucide="log-out" class="w-4 h-4"></i>
+              <span>Log Out</span>
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </div>
 
     <!-- Toast Notification -->
     <div id="toastNotification" class="fixed top-16 right-4 z-50 transform translate-x-full transition-transform duration-300 pointer-events-none max-w-sm">
@@ -717,28 +960,14 @@
       <!-- TAB 1: LAYAR QR (PROYEKTOR)                   -->
       <!-- ============================================== -->
       <section id="viewProjector" class="space-y-6">
-        <div class="bg-[#11131a] border border-[#1e2333] rounded-2xl p-4 flex flex-wrap items-center justify-between gap-4">
+        <div class="bg-[#11131a] border border-[#1e2333] rounded-2xl p-4 flex items-center justify-between gap-4">
           <div class="flex items-center gap-3">
-            <div class="p-2 rounded-lg bg-zinc-900 text-zinc-300 border border-zinc-800">
-              <i data-lucide="monitor" class="w-4 h-4"></i>
+            <div class="p-2 rounded-lg bg-zinc-900 text-indigo-400 border border-zinc-800">
+              <i data-lucide="qr-code" class="w-4 h-4"></i>
             </div>
             <div>
-              <h2 class="text-sm font-bold text-white">Mode Tampilan Proyektor (2 QR Code)</h2>
-              <p class="text-xs text-zinc-400">
-                Pemisahan QR Absensi Masuk & Keluar &bull; Setiap QR hangus seketika setelah 1x scan secara dinamis.
-              </p>
+              <h2 class="text-sm font-bold text-white tracking-tight">QR Panel (One Time QR)</h2>
             </div>
-          </div>
-
-          <div class="flex items-center gap-2">
-            <button id="btnRefreshQr" class="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 text-xs font-medium rounded-lg border border-zinc-800 transition flex items-center gap-1.5">
-              <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
-              <span>Ganti Semua QR</span>
-            </button>
-            <button id="btnFullscreen" class="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 text-xs font-medium rounded-lg border border-zinc-800 transition flex items-center gap-1.5">
-              <i data-lucide="maximize" class="w-3.5 h-3.5"></i>
-              <span>Layar Penuh</span>
-            </button>
           </div>
         </div>
 
@@ -764,7 +993,6 @@
                 <span class="text-[11px] font-mono text-zinc-400">TOKEN MASUK:</span>
                 <span id="activeTokenTextMasuk" class="font-mono text-xs font-bold text-white bg-zinc-900 px-2 py-0.5 rounded border border-emerald-500/30">MEMUAT...</span>
               </div>
-              <span class="text-[10px] text-emerald-400 font-mono font-semibold px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20">1x Pakai</span>
             </div>
 
             <!-- QR Graphic Holder Masuk -->
@@ -773,17 +1001,17 @@
                 <div class="animate-spin w-8 h-8 border-3 border-emerald-600 border-t-transparent rounded-full mb-2"></div>
                 <span class="text-xs text-zinc-700 font-semibold">Memperbarui QR Masuk...</span>
               </div>
-              <img id="qrImageMasuk" src="" alt="QR Absensi Masuk" class="w-[230px] h-[230px] sm:w-[250px] sm:h-[250px] object-contain rounded" />
-              <div id="qrCanvasContainerMasuk" class="hidden"></div>
+              <img id="qrImageMasuk" src="" alt="QR Absensi Masuk" class="w-[230px] h-[230px] sm:w-[250px] sm:h-[250px] object-contain rounded hidden" />
+              <div id="qrCanvasContainerMasuk" class="flex items-center justify-center"></div>
             </div>
 
             <!-- Direct URL Box Masuk -->
             <div class="w-full mt-4 pt-3 border-t border-zinc-800 flex items-center justify-between gap-2">
               <div class="text-left truncate">
-                <div class="text-[10px] text-zinc-400">Tautan Langsung Masuk:</div>
-                <div id="mobileAccessUrlMasuk" class="font-mono text-xs text-zinc-300 truncate max-w-xs sm:max-w-sm">Memuat URL...</div>
+                <div class="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">URL QR:</div>
+                <div id="mobileAccessUrlMasuk" class="font-mono text-xs text-zinc-300 truncate max-w-xs sm:max-w-sm mt-0.5">Memuat URL...</div>
               </div>
-              <button id="btnCopyUrlMasuk" class="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 text-xs font-medium rounded-lg shrink-0 transition flex items-center gap-1">
+              <button id="btnCopyUrlMasuk" class="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 text-xs font-medium rounded-lg shrink-0 transition flex items-center gap-1 cursor-pointer">
                 <i data-lucide="copy" class="w-3.5 h-3.5"></i>
                 <span>Salin</span>
               </button>
@@ -798,7 +1026,7 @@
                 <span class="text-xs font-extrabold text-rose-400 tracking-wide uppercase">QR ABSENSI KELUAR</span>
               </div>
               <button id="btnRefreshQrKeluar" title="Ganti QR Keluar saja"
-                class="px-2.5 py-1 bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 text-[11px] font-medium rounded-lg transition flex items-center gap-1">
+                class="px-2.5 py-1 bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 text-[11px] font-medium rounded-lg transition flex items-center gap-1 cursor-pointer">
                 <i data-lucide="refresh-cw" class="w-3 h-3"></i>
                 <span>Ganti QR</span>
               </button>
@@ -809,7 +1037,6 @@
                 <span class="text-[11px] font-mono text-zinc-400">TOKEN KELUAR:</span>
                 <span id="activeTokenTextKeluar" class="font-mono text-xs font-bold text-white bg-zinc-900 px-2 py-0.5 rounded border border-rose-500/30">MEMUAT...</span>
               </div>
-              <span class="text-[10px] text-rose-400 font-mono font-semibold px-2 py-0.5 rounded bg-rose-500/10 border border-rose-500/20">1x Pakai</span>
             </div>
 
             <!-- QR Graphic Holder Keluar -->
@@ -818,17 +1045,17 @@
                 <div class="animate-spin w-8 h-8 border-3 border-rose-600 border-t-transparent rounded-full mb-2"></div>
                 <span class="text-xs text-zinc-700 font-semibold">Memperbarui QR Keluar...</span>
               </div>
-              <img id="qrImageKeluar" src="" alt="QR Absensi Keluar" class="w-[230px] h-[230px] sm:w-[250px] sm:h-[250px] object-contain rounded" />
-              <div id="qrCanvasContainerKeluar" class="hidden"></div>
+              <img id="qrImageKeluar" src="" alt="QR Absensi Keluar" class="w-[230px] h-[230px] sm:w-[250px] sm:h-[250px] object-contain rounded hidden" />
+              <div id="qrCanvasContainerKeluar" class="flex items-center justify-center"></div>
             </div>
 
             <!-- Direct URL Box Keluar -->
             <div class="w-full mt-4 pt-3 border-t border-zinc-800 flex items-center justify-between gap-2">
               <div class="text-left truncate">
-                <div class="text-[10px] text-zinc-400">Tautan Langsung Keluar:</div>
-                <div id="mobileAccessUrlKeluar" class="font-mono text-xs text-zinc-300 truncate max-w-xs sm:max-w-sm">Memuat URL...</div>
+                <div class="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">URL QR:</div>
+                <div id="mobileAccessUrlKeluar" class="font-mono text-xs text-zinc-300 truncate max-w-xs sm:max-w-sm mt-0.5">Memuat URL...</div>
               </div>
-              <button id="btnCopyUrlKeluar" class="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 text-xs font-medium rounded-lg shrink-0 transition flex items-center gap-1">
+              <button id="btnCopyUrlKeluar" class="px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 text-xs font-medium rounded-lg shrink-0 transition flex items-center gap-1 cursor-pointer">
                 <i data-lucide="copy" class="w-3.5 h-3.5"></i>
                 <span>Salin</span>
               </button>
@@ -842,7 +1069,7 @@
           <div class="flex items-center justify-between mb-4 pb-3 border-b border-zinc-800">
             <div class="flex items-center gap-2">
               <i data-lucide="activity" class="w-4 h-4 text-zinc-400"></i>
-              <h3 class="font-bold text-sm text-white">Aktivitas Presensi Terkini (Masuk & Keluar)</h3>
+              <h3 class="font-bold text-sm text-white">Aktivitas Presensi Terkini</h3>
             </div>
             <span id="liveFeedCount" class="text-[11px] font-mono text-zinc-400">0 aktivitas</span>
           </div>
@@ -1043,7 +1270,7 @@
     <!-- Clean Footer -->
     <footer class="border-t border-[#1c2130] bg-[#090a0f] py-3 text-center text-xs text-zinc-500">
       <div class="max-w-7xl mx-auto px-4 flex flex-wrap items-center justify-between gap-2">
-        <span>Sistem Presensi QR &bull; Presensi Masuk & Keluar</span>
+        <span>Attendance System</span>
         <span class="font-mono text-[11px] text-zinc-600">Terproteksi Regional &bull; Multi-Platform</span>
       </div>
     </footer>
@@ -1163,7 +1390,7 @@
   </script>
 
   <!-- Scripts -->
-  <script src="fingerprint.js?v=20260905_3"></script>
-  <script src="admin.js?v=20260905_3"></script>
+  <script src="fingerprint.js?v=20260905_4"></script>
+  <script src="admin.js?v=20260905_4"></script>
 </body>
 </html>
