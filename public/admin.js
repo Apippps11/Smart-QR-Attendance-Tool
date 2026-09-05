@@ -197,7 +197,6 @@
     const inputPassword = document.getElementById('inputPassword');
     const btnTogglePassword = document.getElementById('btnTogglePassword');
     const eyeIcon = document.getElementById('eyeIcon');
-    const checkShowPassword = document.getElementById('checkShowPassword');
     const loginError = document.getElementById('loginError');
     const btnCancelLogin = document.getElementById('btnCancelLogin');
     const btnLogoutAdmin = document.getElementById('btnLogoutAdmin');
@@ -256,14 +255,12 @@
         } else {
           btnTogglePassword.classList.remove('text-indigo-400', 'bg-indigo-500/20');
           btnTogglePassword.classList.add('text-zinc-400');
-          btnTogglePassword.setAttribute('title', 'Lihat Password');
-          btnTogglePassword.setAttribute('aria-label', 'Lihat Password');
+          btnTogglePassword.setAttribute('title', 'Tekan atau tahan untuk melihat password');
+          btnTogglePassword.setAttribute('aria-label', 'Tekan atau tahan untuk melihat password');
         }
       }
-      if (checkShowPassword) {
-        checkShowPassword.checked = !!show;
-      }
     }
+    window.setPasswordVisibility = setPasswordVisibility;
 
     // Expose globally so inline onclick handler on button also works seamlessly
     window.toggleAdminPassword = function() {
@@ -273,34 +270,102 @@
       try { inputPassword.focus(); } catch (e) {}
     };
 
-    // 1. GATE MODAL ACTIONS
-    btnOpenAdminLogin.addEventListener('click', () => {
-      gateModal.classList.add('hidden');
-      adminLoginModal.classList.remove('hidden');
-      loginError.classList.add('hidden');
-      inputUsername.value = '';
-      inputPassword.value = '';
-      setPasswordVisibility(false);
-      setTimeout(() => inputUsername.focus(), 150);
-    });
+    // Press-and-hold (Peek) & Tap-to-toggle logic for password eye button
+    let isEyePointerDown = false;
+    let eyePressStartTime = 0;
+    let eyeStateBeforePress = false;
+    let lastEyeReleaseTime = 0;
 
-    btnCancelLogin.addEventListener('click', () => {
-      adminLoginModal.classList.add('hidden');
-      gateModal.classList.remove('hidden');
-      setPasswordVisibility(false);
-    });
+    function handleEyePressStart(e) {
+      if (e.button && e.button !== 0) return;
+      if (e.cancelable) e.preventDefault();
+      isEyePointerDown = true;
+      eyePressStartTime = Date.now();
+      eyeStateBeforePress = (inputPassword && inputPassword.type === 'text');
+      // If currently masked, immediately reveal upon press down!
+      if (!eyeStateBeforePress) {
+        setPasswordVisibility(true);
+      }
+    }
 
-    if (btnTogglePassword) {
+    function handleEyePressEnd(e) {
+      if (!isEyePointerDown) return;
+      isEyePointerDown = false;
+      lastEyeReleaseTime = Date.now();
+      const holdDuration = Date.now() - eyePressStartTime;
+
+      if (holdDuration >= 250) {
+        // Held for 250ms or more -> Peek mode! Revert back upon release
+        setPasswordVisibility(eyeStateBeforePress);
+      } else {
+        // Quick tap (< 250ms) -> Toggle mode!
+        if (eyeStateBeforePress) {
+          setPasswordVisibility(false);
+        } else {
+          setPasswordVisibility(true);
+        }
+      }
+      try { inputPassword && inputPassword.focus(); } catch (err) {}
+    }
+
+    function handleEyePressCancel() {
+      if (!isEyePointerDown) return;
+      isEyePointerDown = false;
+      setPasswordVisibility(eyeStateBeforePress);
+    }
+
+    if (btnTogglePassword && !btnTogglePassword._hasHoldListeners) {
+      btnTogglePassword._hasHoldListeners = true;
+      btnTogglePassword.addEventListener('pointerdown', handleEyePressStart);
+      btnTogglePassword.addEventListener('pointerup', handleEyePressEnd);
+      btnTogglePassword.addEventListener('pointercancel', handleEyePressCancel);
+      btnTogglePassword.addEventListener('pointerleave', handleEyePressCancel);
+
+      // Prevent context menu (long press callout / copy popup on iOS/Android)
+      btnTogglePassword.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+      });
+
+      // Handle keyboard accessibility (Enter/Space on button) without synthetic click interference
       btnTogglePassword.addEventListener('click', (e) => {
         e.preventDefault();
         e.stopPropagation();
-        window.toggleAdminPassword();
+        if (Date.now() - lastEyeReleaseTime > 350) {
+          window.toggleAdminPassword();
+        }
+      });
+
+      // Fallback for browsers without Pointer Events
+      if (!window.PointerEvent) {
+        btnTogglePassword.addEventListener('mousedown', handleEyePressStart);
+        btnTogglePassword.addEventListener('mouseup', handleEyePressEnd);
+        btnTogglePassword.addEventListener('mouseleave', handleEyePressCancel);
+        btnTogglePassword.addEventListener('touchstart', handleEyePressStart, { passive: false });
+        btnTogglePassword.addEventListener('touchend', handleEyePressEnd);
+        btnTogglePassword.addEventListener('touchcancel', handleEyePressCancel);
+      }
+    }
+
+    // Gate modal actions
+    if (btnOpenAdminLogin) {
+      btnOpenAdminLogin.addEventListener('click', () => {
+        gateModal.classList.add('hidden');
+        adminLoginModal.classList.remove('hidden');
+        loginError.classList.add('hidden');
+        inputUsername.value = '';
+        inputPassword.value = '';
+        setPasswordVisibility(false);
+        setTimeout(() => inputUsername.focus(), 150);
       });
     }
 
-    if (checkShowPassword) {
-      checkShowPassword.addEventListener('change', (e) => {
-        setPasswordVisibility(e.target.checked);
+    if (btnCancelLogin) {
+      btnCancelLogin.addEventListener('click', () => {
+        adminLoginModal.classList.add('hidden');
+        gateModal.classList.remove('hidden');
+        setPasswordVisibility(false);
       });
     }
 
