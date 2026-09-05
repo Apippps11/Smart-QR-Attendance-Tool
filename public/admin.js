@@ -434,22 +434,34 @@
       if (!text || typeof text !== 'string') return null;
       let token = null;
       let session = null;
+      let type = null;
 
       if (text.startsWith('http://') || text.startsWith('https://')) {
         try {
           const urlObj = new URL(text);
           token = urlObj.searchParams.get('token');
           session = urlObj.searchParams.get('session');
+          type = urlObj.searchParams.get('type');
         } catch (e) {}
       }
 
       if (!token) {
-        const match = text.match(/(QR-[A-Z0-9]{4,10})/i);
+        const match = text.match(/(QR-(?:IN|OUT)?[A-Z0-9\-_]{3,15})/i);
         if (match) token = match[1].toUpperCase();
       }
 
       if (!token || !token.startsWith('QR-')) return null;
-      return { token: token.toUpperCase(), session: session || null };
+
+      if (!type) {
+        if (token.includes('-OUT-')) type = 'KELUAR';
+        else if (token.includes('-IN-')) type = 'MASUK';
+      }
+
+      return { 
+        token: token.toUpperCase(), 
+        session: session || null, 
+        type: type ? type.toUpperCase() : null 
+      };
     }
 
     btnCloseCamera.addEventListener('click', () => {
@@ -524,7 +536,52 @@
       activeScannedToken = qrData.token;
       activeScannedSession = qrData.session;
 
-      openInlineAttendanceModal(qrData.token);
+      if (qrData.type) {
+        currentAttendanceType = qrData.type.toUpperCase();
+      }
+
+      showScanDisclaimer(qrData.token, currentAttendanceType);
+    }
+
+    // 3.5. DISCLAIMER POP-UP SETELAH SCAN QR
+    function showScanDisclaimer(token, type) {
+      const scanDisclaimerModal = document.getElementById('scanDisclaimerModal');
+      const disclaimerTypeBadge = document.getElementById('disclaimerTypeBadge');
+      const disclaimerTokenText = document.getElementById('disclaimerTokenText');
+
+      if (!scanDisclaimerModal) {
+        openInlineAttendanceModal(token);
+        return;
+      }
+
+      const isKeluar = (type || currentAttendanceType) === 'KELUAR';
+      if (disclaimerTokenText) disclaimerTokenText.textContent = token;
+      if (disclaimerTypeBadge) {
+        disclaimerTypeBadge.textContent = isKeluar ? 'ABSENSI KELUAR' : 'ABSENSI MASUK';
+        disclaimerTypeBadge.className = isKeluar 
+          ? 'text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-rose-500/10 text-rose-400 border border-rose-500/20 uppercase'
+          : 'text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 uppercase';
+      }
+
+      scanDisclaimerModal.classList.remove('hidden');
+    }
+
+    const scanDisclaimerModal = document.getElementById('scanDisclaimerModal');
+    const btnConfirmDisclaimer = document.getElementById('btnConfirmDisclaimer');
+    const btnCancelDisclaimer = document.getElementById('btnCancelDisclaimer');
+
+    if (btnConfirmDisclaimer) {
+      btnConfirmDisclaimer.addEventListener('click', () => {
+        if (scanDisclaimerModal) scanDisclaimerModal.classList.add('hidden');
+        openInlineAttendanceModal(activeScannedToken);
+      });
+    }
+
+    if (btnCancelDisclaimer) {
+      btnCancelDisclaimer.addEventListener('click', () => {
+        if (scanDisclaimerModal) scanDisclaimerModal.classList.add('hidden');
+        gateModal.classList.remove('hidden');
+      });
     }
 
     // 4. INLINE ATTENDANCE FORM (TAMPER-PROOF DATE)
@@ -883,14 +940,13 @@
     attendances.unshift(record);
     saveAttendances(attendances);
 
-    // Rotate to new active token immediately!
-    createNewActiveToken();
+    // Rotate to new active token for this attendance type immediately!
+    createNewActiveToken(attendType);
 
     // Trigger Audio & Visuals
     playSuccessChime();
     showToast(`Presensi ${attendType === 'KELUAR' ? 'Keluar' : 'Masuk'} Berhasil`, `${name} telah dicatat.`);
     addLiveActivity(record);
-    loadAuditData();
     populateYearFilter();
     loadAttendanceData();
 
@@ -908,7 +964,6 @@
     initClock();
     initCloudMqtt();
     bootAdminQr();
-    loadAuditData();
     populateYearFilter();
     populateDayFilter();
     loadAttendanceData();
@@ -917,16 +972,13 @@
 
   function initTabs() {
     const tabBtnProjector = document.getElementById('tabBtnProjector');
-    const tabBtnAudit = document.getElementById('tabBtnAudit');
     const tabBtnAttendance = document.getElementById('tabBtnAttendance');
 
     const viewProjector = document.getElementById('viewProjector');
-    const viewAudit = document.getElementById('viewAudit');
     const viewAttendance = document.getElementById('viewAttendance');
 
     const tabs = [
       { btn: tabBtnProjector, view: viewProjector },
-      { btn: tabBtnAudit, view: viewAudit, onShow: loadAuditData },
       { btn: tabBtnAttendance, view: viewAttendance, onShow: () => { populateYearFilter(); populateDayFilter(); loadAttendanceData(); } }
     ];
 
@@ -1122,8 +1174,8 @@
 
         saveAttendances([]);
         saveTokens([]);
-        createNewActiveToken();
-        loadAuditData();
+        createNewActiveToken('MASUK');
+        createNewActiveToken('KELUAR');
         populateYearFilter();
         populateDayFilter();
         loadAttendanceData();
@@ -1619,27 +1671,35 @@
     }
   }
 
-  // --- 8. QR ROTATION & AUDIT LOG ---
-  function generateRandomToken() {
+  // --- 8. QR ROTATION (MASUK & KELUAR) ---
+  function generateRandomToken(prefix = 'IN') {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
     let code = '';
     for (let i = 0; i < 6; i++) {
       code += chars.charAt(Math.floor(Math.random() * chars.length));
     }
-    return `QR-${code}`;
+    return `QR-${prefix}-${code}`;
   }
 
-  function renderActiveQrCode(token) {
-    const qrImage = document.getElementById('qrImage');
-    const qrCanvasContainer = document.getElementById('qrCanvasContainer');
-    const qrOverlayLoading = document.getElementById('qrOverlayLoading');
-    const activeTokenText = document.getElementById('activeTokenText');
-    const mobileAccessUrl = document.getElementById('mobileAccessUrl');
+  function renderActiveQrCode(token, type = 'MASUK') {
+    const isKeluar = (type || '').toUpperCase() === 'KELUAR';
+    const suffix = isKeluar ? 'Keluar' : 'Masuk';
+    const typeParam = isKeluar ? 'KELUAR' : 'MASUK';
 
-    if (!activeTokenText) return;
+    const qrImage = document.getElementById(`qrImage${suffix}`);
+    const qrCanvasContainer = document.getElementById(`qrCanvasContainer${suffix}`);
+    const qrOverlayLoading = document.getElementById(`qrOverlayLoading${suffix}`);
+    const activeTokenText = document.getElementById(`activeTokenText${suffix}`);
+    const mobileAccessUrl = document.getElementById(`mobileAccessUrl${suffix}`);
 
+    if (isKeluar) {
+      currentActiveTokenKeluar = token;
+    } else {
+      currentActiveTokenMasuk = token;
+    }
     currentActiveToken = token;
-    activeTokenText.textContent = token;
+
+    if (activeTokenText) activeTokenText.textContent = token;
 
     const currentUrl = new URL(window.location.href);
     let basePath = currentUrl.pathname;
@@ -1651,7 +1711,7 @@
       basePath = basePath + '/attend.html';
     }
 
-    const attendUrl = `${currentUrl.origin}${basePath}?token=${encodeURIComponent(token)}&session=${encodeURIComponent(adminSessionId)}`;
+    const attendUrl = `${currentUrl.origin}${basePath}?token=${encodeURIComponent(token)}&type=${typeParam}&session=${encodeURIComponent(adminSessionId)}`;
     if (mobileAccessUrl) mobileAccessUrl.textContent = attendUrl;
 
     if (qrOverlayLoading) qrOverlayLoading.classList.remove('hidden');
@@ -1670,8 +1730,8 @@
           qrCanvasContainer.innerHTML = '';
           new QRCode(qrCanvasContainer, {
             text: attendUrl,
-            width: 260,
-            height: 260,
+            width: 250,
+            height: 250,
             colorDark: '#090a0f',
             colorLight: '#ffffff',
             correctLevel: QRCode.CorrectLevel.M
@@ -1684,17 +1744,23 @@
     }
   }
 
-  function createNewActiveToken() {
-    const newToken = generateRandomToken();
+  function createNewActiveToken(type = 'MASUK') {
+    const isKeluar = (type || '').toUpperCase() === 'KELUAR';
+    const prefix = isKeluar ? 'OUT' : 'IN';
+    const typeVal = isKeluar ? 'KELUAR' : 'MASUK';
+    const newToken = generateRandomToken(prefix);
     const nowIso = new Date().toISOString();
 
     const tokens = getStoredTokens();
     tokens.forEach(t => {
-      if (t.status === 'ACTIVE') t.status = 'EXPIRED';
+      if (t.status === 'ACTIVE' && (t.type === typeVal || (!t.type && !isKeluar))) {
+        t.status = 'EXPIRED';
+      }
     });
 
     tokens.unshift({
       token: newToken,
+      type: typeVal,
       status: 'ACTIVE',
       created_at: nowIso,
       used_at: null,
@@ -1703,94 +1769,71 @@
     });
     saveTokens(tokens);
 
-    renderActiveQrCode(newToken);
+    renderActiveQrCode(newToken, typeVal);
     return newToken;
   }
 
-  function loadAuditData() {
-    const auditMetricTotal = document.getElementById('auditMetricTotal');
-    const auditMetricActive = document.getElementById('auditMetricActive');
-    const auditMetricUsed = document.getElementById('auditMetricUsed');
-    const auditMetricExpired = document.getElementById('auditMetricExpired');
-    const auditTableBody = document.getElementById('auditTableBody');
-
-    if (!auditTableBody) return;
-
-    const tokens = getStoredTokens();
-    const total = tokens.length;
-    const active = tokens.filter(t => t.status === 'ACTIVE').length;
-    const used = tokens.filter(t => t.status === 'USED').length;
-    const expired = tokens.filter(t => t.status === 'EXPIRED').length;
-
-    if (auditMetricTotal) auditMetricTotal.textContent = total;
-    if (auditMetricActive) auditMetricActive.textContent = active;
-    if (auditMetricUsed) auditMetricUsed.textContent = used;
-    if (auditMetricExpired) auditMetricExpired.textContent = expired;
-
-    if (tokens.length === 0) {
-      auditTableBody.innerHTML = `<tr><td colspan="6" class="py-8 text-center text-zinc-500">Belum ada riwayat token QR.</td></tr>`;
-      return;
-    }
-
-    auditTableBody.innerHTML = tokens.slice(0, 50).map(t => {
-      let badge = '';
-      if (t.status === 'ACTIVE') {
-        badge = '<span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">AKTIF</span>';
-      } else if (t.status === 'USED') {
-        badge = '<span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-zinc-800 text-zinc-300 border border-zinc-700">TERPAKAI</span>';
-      } else {
-        badge = '<span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-zinc-950 text-zinc-500 border border-zinc-900">KEDALUWARSA</span>';
-      }
-
-      const typeLabel = t.type ? ` <span class="text-[9px] font-mono px-1 rounded ${t.type === 'KELUAR' ? 'bg-rose-500/10 text-rose-400' : 'bg-emerald-500/10 text-emerald-400'}">${t.type}</span>` : '';
-
-      return `
-        <tr class="hover:bg-zinc-900/60 transition">
-          <td class="py-3 px-4">${badge}${typeLabel}</td>
-          <td class="py-3 px-4 font-mono text-zinc-200 font-bold">${escapeHtml(t.token)}</td>
-          <td class="py-3 px-4 text-white font-medium">${escapeHtml(t.used_by_name || '-')}</td>
-          <td class="py-3 px-4 font-mono text-[11px] text-zinc-400 truncate max-w-[150px]">${escapeHtml(t.device_id || '-')}</td>
-          <td class="py-3 px-4 text-zinc-400 text-[11px] font-mono">${t.created_at ? new Date(t.created_at).toLocaleTimeString('id-ID') : '-'}</td>
-          <td class="py-3 px-4 text-zinc-400 text-[11px] font-mono">${t.used_at ? new Date(t.used_at).toLocaleTimeString('id-ID') : '-'}</td>
-        </tr>
-      `;
-    }).join('');
-  }
-
   function bootAdminQr() {
-    const btnCopyUrl = document.getElementById('btnCopyUrl');
+    const btnCopyUrlMasuk = document.getElementById('btnCopyUrlMasuk');
+    const btnCopyUrlKeluar = document.getElementById('btnCopyUrlKeluar');
+    const mobileAccessUrlMasuk = document.getElementById('mobileAccessUrlMasuk');
+    const mobileAccessUrlKeluar = document.getElementById('mobileAccessUrlKeluar');
+
+    const btnRefreshQrMasuk = document.getElementById('btnRefreshQrMasuk');
+    const btnRefreshQrKeluar = document.getElementById('btnRefreshQrKeluar');
     const btnRefreshQr = document.getElementById('btnRefreshQr');
-    const btnRefreshAudit = document.getElementById('btnRefreshAudit');
     const btnFullscreen = document.getElementById('btnFullscreen');
-    const mobileAccessUrl = document.getElementById('mobileAccessUrl');
 
     const tokens = getStoredTokens();
-    const active = tokens.find(t => t.status === 'ACTIVE');
-    if (active) {
-      renderActiveQrCode(active.token);
+    const activeMasuk = tokens.find(t => t.status === 'ACTIVE' && (t.type === 'MASUK' || !t.type));
+    if (activeMasuk) {
+      renderActiveQrCode(activeMasuk.token, 'MASUK');
     } else {
-      createNewActiveToken();
+      createNewActiveToken('MASUK');
     }
 
-    if (btnCopyUrl && mobileAccessUrl) {
-      btnCopyUrl.addEventListener('click', () => {
-        navigator.clipboard.writeText(mobileAccessUrl.textContent).then(() => {
-          showToast('Tautan Disalin', 'URL presensi siap dibagikan.');
+    const activeKeluar = tokens.find(t => t.status === 'ACTIVE' && t.type === 'KELUAR');
+    if (activeKeluar) {
+      renderActiveQrCode(activeKeluar.token, 'KELUAR');
+    } else {
+      createNewActiveToken('KELUAR');
+    }
+
+    if (btnCopyUrlMasuk && mobileAccessUrlMasuk) {
+      btnCopyUrlMasuk.addEventListener('click', () => {
+        navigator.clipboard.writeText(mobileAccessUrlMasuk.textContent).then(() => {
+          showToast('Tautan Masuk Disalin', 'URL presensi masuk siap dibagikan.');
         });
+      });
+    }
+
+    if (btnCopyUrlKeluar && mobileAccessUrlKeluar) {
+      btnCopyUrlKeluar.addEventListener('click', () => {
+        navigator.clipboard.writeText(mobileAccessUrlKeluar.textContent).then(() => {
+          showToast('Tautan Keluar Disalin', 'URL presensi keluar siap dibagikan.');
+        });
+      });
+    }
+
+    if (btnRefreshQrMasuk) {
+      btnRefreshQrMasuk.addEventListener('click', () => {
+        createNewActiveToken('MASUK');
+        showToast('QR Masuk Diperbarui', 'Token QR Masuk baru telah aktif.');
+      });
+    }
+
+    if (btnRefreshQrKeluar) {
+      btnRefreshQrKeluar.addEventListener('click', () => {
+        createNewActiveToken('KELUAR');
+        showToast('QR Keluar Diperbarui', 'Token QR Keluar baru telah aktif.');
       });
     }
 
     if (btnRefreshQr) {
       btnRefreshQr.addEventListener('click', () => {
-        createNewActiveToken();
-        showToast('QR Diperbarui', 'Token QR baru telah aktif.');
-      });
-    }
-
-    if (btnRefreshAudit) {
-      btnRefreshAudit.addEventListener('click', () => {
-        loadAuditData();
-        showToast('Log Disinkronkan', 'Data token terbaru dimuat.');
+        createNewActiveToken('MASUK');
+        createNewActiveToken('KELUAR');
+        showToast('Semua QR Diperbarui', 'Token QR Masuk & Keluar baru telah aktif.');
       });
     }
 
