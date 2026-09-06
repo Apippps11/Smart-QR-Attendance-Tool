@@ -180,9 +180,19 @@
     html.light #cameraScanModal,
     html.light #scanDisclaimerModal,
     html.light #attendInlineModal,
-    html.light #settingsModal,
     html.light #motivationalModal {
       background-color: rgba(15, 23, 42, 0.6) !important;
+    }
+    html.light #btnThemeToggleGate {
+      background-color: rgba(15, 23, 42, 0.08) !important;
+      border-color: rgba(15, 23, 42, 0.15) !important;
+      color: #0f172a !important;
+    }
+    html.light #btnAdminThemeToggle,
+    html.light #btnFullscreenSetting {
+      background-color: #f1f5f9 !important;
+      border-color: #cbd5e1 !important;
+      color: #0f172a !important;
     }
     html.light .bg-\[\#11131a\],
     html.light .bg-\[\#121624\],
@@ -952,68 +962,7 @@
       </div>
     </aside>
 
-    <!-- Settings Modal (Opened from Sidebar) -->
-    <div id="settingsModal" class="fixed inset-0 z-50 bg-[#090b10]/92 backdrop-blur-md flex items-center justify-center p-4 hidden">
-      <div class="pixel-box rounded-2xl p-6 sm:p-7 max-w-sm w-full space-y-5 relative overflow-hidden">
-        <!-- Pixel Corner Accents -->
-        <div class="pixel-corner-tl"></div>
-        <div class="pixel-corner-tr"></div>
-        <div class="pixel-corner-bl"></div>
-        <div class="pixel-corner-br"></div>
 
-        <!-- Modal Header -->
-        <div class="flex items-center justify-between pb-3 border-b border-zinc-800">
-          <div class="flex items-center gap-2.5">
-            <div class="w-8 h-8 rounded-lg bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400">
-              <i data-lucide="settings" class="w-4 h-4"></i>
-            </div>
-            <h3 class="font-bold text-sm sm:text-base text-white">Settings</h3>
-          </div>
-          <button id="btnCloseSettings" type="button" class="p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-white/10 transition">
-            <i data-lucide="x" class="w-5 h-5"></i>
-          </button>
-        </div>
-
-        <!-- Settings Options -->
-        <div class="space-y-3.5">
-          <!-- 1. Tema Tampilan (Light & Dark Mode) -->
-          <div class="p-3.5 rounded-xl bg-zinc-950/70 border border-zinc-800 flex items-center justify-between gap-3">
-            <div>
-              <div class="text-xs font-bold text-white">Tema Tampilan</div>
-              <div class="text-[10px] text-zinc-400 mt-0.5">Mode terang atau gelap admin</div>
-            </div>
-            <button id="btnAdminThemeToggle" type="button"
-              class="px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-xs font-semibold text-zinc-200 transition flex items-center gap-1.5 active:scale-95 cursor-pointer">
-              <i id="adminThemeIcon" class="hn hn-sun-solid text-white text-xs"></i>
-              <span id="adminThemeLabel">Tema</span>
-            </button>
-          </div>
-
-          <!-- 2. Mode Layar Penuh (Fullscreen) -->
-          <div class="p-3.5 rounded-xl bg-zinc-950/70 border border-zinc-800 flex items-center justify-between gap-3">
-            <div>
-              <div class="text-xs font-bold text-white">Layar Penuh</div>
-              <div class="text-[10px] text-zinc-400 mt-0.5">Mode proyektor tanpa bilah browser</div>
-            </div>
-            <button id="btnFullscreenSetting" type="button"
-              class="px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-xs font-semibold text-zinc-200 transition flex items-center gap-1.5 active:scale-95 cursor-pointer">
-              <i data-lucide="maximize" class="w-3.5 h-3.5 text-indigo-400"></i>
-              <span>Layar Penuh</span>
-            </button>
-          </div>
-
-          <!-- 3. Tombol Log Out (Menggantikan Kunci Layar) -->
-          <div class="pt-2 border-t border-zinc-800/80">
-            <button id="btnLogoutAdmin" type="button"
-              class="w-full py-3 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-400 hover:text-rose-300 text-xs font-bold transition flex items-center justify-center gap-2 active:scale-98 shadow-sm cursor-pointer">
-              <i data-lucide="log-out" class="w-4 h-4"></i>
-              <span>Log Out</span>
-            </button>
-          </div>
-        </div>
-
-      </div>
-    </div>
 
     <!-- Toast Notification -->
     <div id="toastNotification" class="fixed top-16 right-4 z-50 transform translate-x-full transition-transform duration-300 pointer-events-none max-w-sm">
@@ -1219,8 +1168,8 @@
           </button>
         </div>
 
-        <!-- FILTER BAR TERPADU VERTIKAL (PENCARIAN, TAHUN, BULAN, MINGGU, TANGGAL) -->
-        <div class="bg-[#121624] border border-white/10 rounded-2xl p-4 sm:p-5 space-y-4 shadow-xl shadow-black/30">
+        <!-- FILTER BAR TERPADU (PENCARIAN, TAHUN, BULAN, MINGGU, TANGGAL, EXPORT, RESET) -->
+        <div class="bg-[#121624] border border-white/10 rounded-2xl p-4 sm:p-5 space-y-3.5 shadow-xl shadow-black/30">
           
           <!-- Top Bar: Pencarian & Aksi Cepat -->
           <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-white/[0.08]">
@@ -1245,78 +1194,60 @@
               </button>
               <button id="btnResetData" class="px-3 py-2.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 text-xs font-bold rounded-xl transition flex items-center gap-1.5 active:scale-95 cursor-pointer">
                 <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
-                <span>Reset</span>
+                <span>Reset Data</span>
               </button>
             </div>
           </div>
 
-          <!-- DERETAN ROW FILTER SEARAH VERTIKAL KE BAWAH -->
-          <div class="space-y-4">
-
-            <!-- 1. Row Tahun (Vertikal) -->
-            <div class="space-y-1.5">
-              <div class="flex items-center justify-between">
-                <span class="text-xs font-bold text-zinc-300 flex items-center gap-1.5">
-                  <i data-lucide="calendar-range" class="w-3.5 h-3.5 text-indigo-400"></i>
-                  <span>Pilih Tahun:</span>
-                </span>
-                <span id="badgeActiveYear" class="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-md bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
-                  Aktif: Semua Tahun
-                </span>
-              </div>
-              <div id="filterButtonsYear" class="flex flex-wrap gap-2">
-                <!-- Dynamically injected in admin.js -->
-              </div>
+          <!-- Second Bar: Dropdown Periode (Rapi & Kompak) -->
+          <div class="flex flex-wrap items-center gap-3 pt-1">
+            <!-- Filter Tahun Dropdown -->
+            <div class="flex items-center gap-2 min-w-[130px]">
+              <span class="text-xs text-zinc-400 font-semibold whitespace-nowrap">Tahun:</span>
+              <select id="selectFilterYear" class="w-full px-3 py-2 bg-[#161a28] border border-white/10 rounded-xl text-xs text-zinc-200 focus:outline-none focus:border-indigo-500 font-medium cursor-pointer">
+                <option value="ALL">Semua Tahun</option>
+              </select>
             </div>
 
-            <!-- 2. Row Bulan (Vertikal - Maksimal 6 per baris -> Pas 2 baris untuk 12 opsi) -->
-            <div class="space-y-1.5 pt-1 border-t border-white/[0.05]">
-              <div class="flex items-center justify-between">
-                <span class="text-xs font-bold text-zinc-300 flex items-center gap-1.5">
-                  <i data-lucide="calendar" class="w-3.5 h-3.5 text-blue-400"></i>
-                  <span>Pilih Bulan:</span>
-                </span>
-                <span id="badgeActiveMonth" class="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-md bg-blue-500/10 text-blue-300 border border-blue-500/20">
-                  Aktif: Semua Bulan
-                </span>
-              </div>
-              <div id="filterButtonsMonth" class="grid grid-cols-3 sm:grid-cols-6 gap-2">
-                <!-- Dynamically injected in admin.js: exactly 6 per row -> 2 rows -->
-              </div>
+            <!-- Filter Bulan Dropdown -->
+            <div class="flex items-center gap-2 min-w-[140px]">
+              <span class="text-xs text-zinc-400 font-semibold whitespace-nowrap">Bulan:</span>
+              <select id="selectFilterMonth" class="w-full px-3 py-2 bg-[#161a28] border border-white/10 rounded-xl text-xs text-zinc-200 focus:outline-none focus:border-indigo-500 font-medium cursor-pointer">
+                <option value="ALL">Semua Bulan</option>
+                <option value="01">Januari</option>
+                <option value="02">Februari</option>
+                <option value="03">Maret</option>
+                <option value="04">April</option>
+                <option value="05">Mei</option>
+                <option value="06">Juni</option>
+                <option value="07">Juli</option>
+                <option value="08">Agustus</option>
+                <option value="09">September</option>
+                <option value="10">Oktober</option>
+                <option value="11">November</option>
+                <option value="12">Desember</option>
+              </select>
             </div>
 
-            <!-- 3. Row Minggu (Vertikal - 4 Minggu) -->
-            <div class="space-y-1.5 pt-1 border-t border-white/[0.05]">
-              <div class="flex items-center justify-between">
-                <span class="text-xs font-bold text-zinc-300 flex items-center gap-1.5">
-                  <i data-lucide="calendar-days" class="w-3.5 h-3.5 text-emerald-400"></i>
-                  <span>Pilih Minggu:</span>
-                </span>
-                <span id="badgeActiveWeek" class="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">
-                  Aktif: Semua Minggu
-                </span>
-              </div>
-              <div id="filterButtonsWeek" class="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                <!-- Dynamically injected in admin.js -->
-              </div>
+            <!-- Filter Minggu Dropdown (Muncul HANYA KETIKA KATEGORI BULAN DIKLIK/DIPILIH) -->
+            <div id="containerFilterWeek" class="hidden flex items-center gap-2 min-w-[130px] transition-all">
+              <span class="text-xs text-zinc-400 font-semibold whitespace-nowrap">Minggu:</span>
+              <select id="selectFilterWeek" class="w-full px-3 py-2 bg-[#161a28] border border-white/10 rounded-xl text-xs text-zinc-200 focus:outline-none focus:border-indigo-500 font-medium cursor-pointer">
+                <option value="ALL">Semua Minggu</option>
+                <option value="W1">Minggu 1</option>
+                <option value="W2">Minggu 2</option>
+                <option value="W3">Minggu 3</option>
+                <option value="W4">Minggu 4</option>
+              </select>
             </div>
 
-            <!-- 4. Row Tanggal (Vertikal - Bagi per 6 mendatar seperti kalender) -->
-            <div class="space-y-1.5 pt-1 border-t border-white/[0.05]">
-              <div class="flex items-center justify-between">
-                <span class="text-xs font-bold text-zinc-300 flex items-center gap-1.5">
-                  <i data-lucide="hash" class="w-3.5 h-3.5 text-amber-400"></i>
-                  <span>Pilih Tanggal:</span>
-                </span>
-                <span id="badgeActiveDay" class="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-300 border border-amber-500/20">
-                  Aktif: Semua Tanggal
-                </span>
-              </div>
-              <div id="filterButtonsDay" class="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
-                <!-- Dynamically injected in admin.js: rows of 6 in horizontal calendar order -->
-              </div>
+            <!-- Filter Tanggal Dropdown (Muncul HANYA KETIKA KATEGORI BULAN DIKLIK/DIPILIH) -->
+            <div id="containerFilterDay" class="hidden flex items-center gap-2 min-w-[130px] transition-all">
+              <span class="text-xs text-zinc-400 font-semibold whitespace-nowrap">Tanggal:</span>
+              <select id="selectFilterDay" class="w-full px-3 py-2 bg-[#161a28] border border-white/10 rounded-xl text-xs text-zinc-200 focus:outline-none focus:border-indigo-500 font-medium cursor-pointer">
+                <option value="ALL">Semua Tanggal</option>
+              </select>
             </div>
-
           </div>
 
         </div>

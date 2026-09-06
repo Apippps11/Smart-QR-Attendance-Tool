@@ -108,11 +108,6 @@
   let currentActiveTokenKeluar = null;
   let currentAttendanceType = 'MASUK'; // 'MASUK' | 'KELUAR'
   let activeSubTab = 'UTAMA'; // 'UTAMA' | 'MASUK' | 'KELUAR'
-  let activePeriodFilter = 'ALL'; // 'ALL' | 'TODAY' | 'WEEK' | 'MONTH'
-  let activeFilterYear = 'ALL';
-  let activeFilterMonth = 'ALL';
-  let activeFilterWeek = 'ALL';
-  let activeFilterDay = 'ALL';
   let mqttClient = null;
   let html5QrScanner = null;
   let activeScannedToken = null;
@@ -209,6 +204,22 @@
     } catch (e) {}
   }
 
+  // --- LOGOUT CONTROLLER ---
+  function handleAdminLogout() {
+    if (confirm('Keluar dari sesi admin (Log Out)?')) {
+      try {
+        sessionStorage.removeItem(STORAGE_AUTH);
+        sessionStorage.removeItem('sqr_admin_username');
+      } catch (err) {}
+      const adminSidebarDrawer = document.getElementById('adminSidebarDrawer');
+      if (adminSidebarDrawer) adminSidebarDrawer.classList.add('-translate-x-full');
+      const adminSidebarBackdrop = document.getElementById('adminSidebarBackdrop');
+      if (adminSidebarBackdrop) adminSidebarBackdrop.classList.add('hidden');
+      checkAuthStatus();
+      showToast('Logout Berhasil', 'Sesi admin telah ditutup.');
+    }
+  }
+
   // --- HARD AUTHENTICATION & SECURITY CONTROLLER ---
   function checkAuthStatus() {
     const gateModal = document.getElementById('gateModal');
@@ -246,8 +257,6 @@
       if (absensiChoiceModal) absensiChoiceModal.classList.add('hidden');
       if (cameraScanModal) cameraScanModal.classList.add('hidden');
       if (attendInlineModal) attendInlineModal.classList.add('hidden');
-      const settingsModal = document.getElementById('settingsModal');
-      if (settingsModal) settingsModal.classList.add('hidden');
       const adminSidebarDrawer = document.getElementById('adminSidebarDrawer');
       if (adminSidebarDrawer) adminSidebarDrawer.classList.add('-translate-x-full');
       const adminSidebarBackdrop = document.getElementById('adminSidebarBackdrop');
@@ -470,41 +479,31 @@
 
     formAdminLogin.addEventListener('submit', (e) => {
       e.preventDefault();
-      const user = inputUsername.value.trim();
-      const pass = inputPassword.value;
+      const user = inputUsername ? inputUsername.value.trim() : '';
+      const pass = inputPassword ? inputPassword.value : '';
 
       const accounts = getAdminAccounts();
-      const matched = accounts.find(a => a.username === user && a.password === pass);
+      const matched = accounts.find(a => a.username.trim().toLowerCase() === user.toLowerCase() && a.password === pass);
 
       if (matched) {
         setPasswordVisibility(false);
         try {
           sessionStorage.setItem(STORAGE_AUTH, 'true');
+          sessionStorage.setItem('sqr_admin_username', matched.username);
         } catch (err) {}
         checkAuthStatus();
         showToast('Login Berhasil', `Akses dibuka. Selamat datang ${matched.username}.`);
       } else {
         loginError.classList.remove('hidden');
-        inputPassword.value = '';
-        inputPassword.focus();
+        if (inputPassword) {
+          inputPassword.value = '';
+          inputPassword.focus();
+        }
       }
     });
 
     if (btnLogoutAdmin) {
-      btnLogoutAdmin.addEventListener('click', () => {
-        if (confirm('Keluar dari sesi admin (Log Out)?')) {
-          try {
-            sessionStorage.removeItem(STORAGE_AUTH);
-          } catch (err) {}
-          const settingsModal = document.getElementById('settingsModal');
-          if (settingsModal) settingsModal.classList.add('hidden');
-          const adminSidebarDrawer = document.getElementById('adminSidebarDrawer');
-          if (adminSidebarDrawer) adminSidebarDrawer.classList.add('-translate-x-full');
-          const adminSidebarBackdrop = document.getElementById('adminSidebarBackdrop');
-          if (adminSidebarBackdrop) adminSidebarBackdrop.classList.add('hidden');
-          checkAuthStatus();
-        }
-      });
+      btnLogoutAdmin.addEventListener('click', handleAdminLogout);
     }
 
     // 2. ABSENSI CHOICE ACTIONS
@@ -1113,7 +1112,7 @@
     playSuccessChime();
     showToast(`Presensi ${attendType === 'KELUAR' ? 'Keluar' : 'Masuk'} Berhasil`, `${name} telah dicatat.`);
     addLiveActivity(record);
-    renderYearFilterButtons();
+    populateYearFilter();
     loadAttendanceData();
 
     return { success: true, attendance: record };
@@ -1158,10 +1157,7 @@
     if (viewAttendance) {
       if (viewName === 'attendance') {
         viewAttendance.classList.remove('hidden');
-        renderYearFilterButtons();
-        renderMonthFilterButtons();
-        renderWeekFilterButtons();
-        renderDayFilterButtons();
+        populateYearFilter();
         loadAttendanceData();
       } else {
         viewAttendance.classList.add('hidden');
@@ -1240,26 +1236,27 @@
     const listEl = document.getElementById('adminAccountsList');
     if (!listEl) return;
     const accounts = getAdminAccounts();
+    const canDelete = accounts.length > 1;
+
     listEl.innerHTML = accounts.map(acc => {
-      const isSuper = acc.username === 'Admin1118';
       return `
         <div class="p-2.5 rounded-xl bg-zinc-900/80 border border-zinc-800 flex items-center justify-between text-xs">
           <div class="flex items-center gap-2">
-            <span class="w-2 h-2 rounded-full ${isSuper ? 'bg-indigo-400' : 'bg-emerald-400'}"></span>
+            <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
             <div>
               <div class="font-bold text-white font-mono">${escapeHtml(acc.username)}</div>
               <div class="text-[10px] text-zinc-400">${acc.role || 'Admin'}</div>
             </div>
           </div>
           <div class="flex items-center gap-1.5">
-            ${isSuper ? `
-              <span class="px-2 py-0.5 rounded bg-indigo-500/10 border border-indigo-500/20 text-[10px] font-semibold text-indigo-400">Utama</span>
-            ` : `
+            ${canDelete ? `
               <button type="button" data-del-user="${escapeHtml(acc.username)}"
-                class="btn-delete-admin px-2 py-1 rounded bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 text-[10px] font-bold transition flex items-center gap-1 cursor-pointer">
+                class="btn-delete-admin px-2.5 py-1 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 text-[11px] font-bold transition flex items-center gap-1 cursor-pointer active:scale-95">
                 <i data-lucide="trash-2" class="w-3 h-3"></i>
                 <span>Hapus</span>
               </button>
+            ` : `
+              <span class="px-2 py-0.5 rounded bg-indigo-500/10 border border-indigo-500/20 text-[10px] font-semibold text-indigo-300">Admin Utama</span>
             `}
           </div>
         </div>
@@ -1269,12 +1266,23 @@
     listEl.querySelectorAll('.btn-delete-admin').forEach(btn => {
       btn.addEventListener('click', () => {
         const u = btn.getAttribute('data-del-user');
-        if (!u || u === 'Admin1118') return;
-        if (confirm(`Hapus akun admin "${u}"?`)) {
-          const current = getAdminAccounts().filter(a => a.username !== u);
-          saveAdminAccounts(current);
+        if (!u) return;
+        const current = getAdminAccounts();
+        if (current.length <= 1) {
+          alert('Tidak dapat menghapus akun admin terakhir. Minimal harus ada 1 akun admin aktif di sistem.');
+          return;
+        }
+        if (confirm(`Hapus akun admin "${u}" dari seluruh data sistem?`)) {
+          const updated = current.filter(a => a.username.toLowerCase() !== u.toLowerCase());
+          saveAdminAccounts(updated);
           renderAdminAccountsList();
-          showToast('Admin Dihapus', `Akun "${u}" berhasil dihapus.`);
+          showToast('Admin Dihapus', `Akun "${u}" berhasil dihapus dari data utama.`);
+
+          // If current logged-in user was deleted, trigger logout immediately
+          const activeUser = sessionStorage.getItem('sqr_admin_username');
+          if (activeUser && activeUser.toLowerCase() === u.toLowerCase()) {
+            handleAdminLogout();
+          }
         }
       });
     });
@@ -1291,7 +1299,7 @@
       formAddAdmin.addEventListener('submit', (e) => {
         e.preventDefault();
         const username = newAdminUser ? newAdminUser.value.trim() : '';
-        const password = newAdminPass ? newAdminPass.value : '';
+        const password = newAdminPass ? newAdminPass.value.trim() : '';
 
         if (!username || !password) {
           alert('Harap isi username dan password admin.');
@@ -1300,7 +1308,7 @@
 
         const accounts = getAdminAccounts();
         if (accounts.some(a => a.username.toLowerCase() === username.toLowerCase())) {
-          alert(`Username "${username}" sudah digunakan. Silakan pilih username lain.`);
+          alert(`Username "${username}" sudah digunakan. Silakan gunakan username lain.`);
           return;
         }
 
@@ -1314,7 +1322,7 @@
         if (newAdminUser) newAdminUser.value = '';
         if (newAdminPass) newAdminPass.value = '';
         renderAdminAccountsList();
-        showToast('Admin Ditambahkan', `Akun "${username}" berhasil didaftarkan.`);
+        showToast('Admin Ditambahkan', `Akun admin "${username}" aktif dan siap digunakan.`);
       });
     }
   }
@@ -1331,6 +1339,7 @@
 
     const btnAdminThemeToggle = document.getElementById('btnAdminThemeToggle');
     const btnFullscreenSetting = document.getElementById('btnFullscreenSetting');
+    const btnLogoutAdmin = document.getElementById('btnLogoutAdmin');
 
     function openSidebar() {
       if (adminSidebarDrawer) adminSidebarDrawer.classList.remove('-translate-x-full');
@@ -1348,15 +1357,24 @@
     if (adminSidebarBackdrop) adminSidebarBackdrop.addEventListener('click', closeSidebar);
 
     if (sidebarBtnProjector) {
-      sidebarBtnProjector.addEventListener('click', () => switchAdminView('projector'));
+      sidebarBtnProjector.addEventListener('click', () => {
+        closeSidebar();
+        switchAdminView('projector');
+      });
     }
 
     if (sidebarBtnAttendance) {
-      sidebarBtnAttendance.addEventListener('click', () => switchAdminView('attendance'));
+      sidebarBtnAttendance.addEventListener('click', () => {
+        closeSidebar();
+        switchAdminView('attendance');
+      });
     }
 
     if (sidebarBtnSettings) {
-      sidebarBtnSettings.addEventListener('click', () => switchAdminView('settings'));
+      sidebarBtnSettings.addEventListener('click', () => {
+        closeSidebar();
+        switchAdminView('settings');
+      });
     }
 
     if (btnAdminThemeToggle) {
@@ -1367,17 +1385,29 @@
 
     if (btnFullscreenSetting) {
       btnFullscreenSetting.addEventListener('click', () => {
-        if (!document.fullscreenElement) {
-          document.documentElement.requestFullscreen().catch(() => {});
+        if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+          if (document.documentElement.requestFullscreen) {
+            document.documentElement.requestFullscreen().catch(() => {});
+          } else if (document.documentElement.webkitRequestFullscreen) {
+            document.documentElement.webkitRequestFullscreen();
+          }
         } else {
-          document.exitFullscreen().catch(() => {});
+          if (document.exitFullscreen) {
+            document.exitFullscreen().catch(() => {});
+          } else if (document.webkitExitFullscreen) {
+            document.webkitExitFullscreen();
+          }
         }
       });
     }
 
-    // Dynamic Fullscreen Button Label (Requirement 4)
-    document.addEventListener('fullscreenchange', () => {
-      const isFull = !!document.fullscreenElement;
+    if (btnLogoutAdmin) {
+      btnLogoutAdmin.addEventListener('click', handleAdminLogout);
+    }
+
+    // Dynamic Fullscreen Button Label & Icon with standard and webkit support
+    function updateFullscreenUI() {
+      const isFull = !!(document.fullscreenElement || document.webkitFullscreenElement);
       const fullscreenLabel = document.getElementById('fullscreenLabel');
       const fullscreenIcon = document.getElementById('fullscreenIcon');
       if (fullscreenLabel) {
@@ -1387,7 +1417,9 @@
         fullscreenIcon.setAttribute('data-lucide', isFull ? 'minimize' : 'maximize');
         lucide.createIcons();
       }
-    });
+    }
+    document.addEventListener('fullscreenchange', updateFullscreenUI);
+    document.addEventListener('webkitfullscreenchange', updateFullscreenUI);
 
     initAdminAccountManagement();
     renderAdminAccountsList();
@@ -1442,13 +1474,10 @@
     }
   }
 
-  // --- DYNAMIC VERTICAL BUTTON FILTERS ENGINE ---
-
-  // 1. Render Year Filter Buttons
-  function renderYearFilterButtons() {
-    const container = document.getElementById('filterButtonsYear');
-    const badge = document.getElementById('badgeActiveYear');
-    if (!container) return;
+  // --- DATABASE FILTER ENGINE (COMPACT DROPDOWN WITH CONDITIONAL MONTH REVEAL) ---
+  function populateYearFilter() {
+    const selectFilterYear = document.getElementById('selectFilterYear');
+    if (!selectFilterYear) return;
 
     const attendances = getStoredAttendances();
     const currentYear = new Date().getFullYear();
@@ -1461,199 +1490,110 @@
         if (!isNaN(yr) && yr >= 2026) yearSet.add(yr);
       }
     });
-    const allYears = Array.from(yearSet).sort((a, b) => a - b);
 
-    // Update Badge
-    if (badge) {
-      badge.textContent = activeFilterYear === 'ALL' ? 'Aktif: Semua Tahun' : `Aktif: Tahun ${activeFilterYear}`;
-    }
-
-    // Build buttons: omit activeFilterYear; if not ALL, put "Semua Tahun" at the very beginning
-    const buttons = [];
-    if (activeFilterYear !== 'ALL') {
-      buttons.push({ val: 'ALL', label: 'Semua Tahun', isReset: true });
-    }
-    allYears.forEach(y => {
-      const yStr = String(y);
-      if (yStr !== activeFilterYear) {
-        buttons.push({ val: yStr, label: `Tahun ${yStr}`, isReset: false });
-      }
+    const prevVal = selectFilterYear.value;
+    selectFilterYear.innerHTML = '<option value="ALL">Semua Tahun</option>';
+    Array.from(yearSet).sort((a, b) => a - b).forEach(y => {
+      const opt = document.createElement('option');
+      opt.value = String(y);
+      opt.textContent = `Tahun ${y}`;
+      selectFilterYear.appendChild(opt);
     });
 
-    container.innerHTML = buttons.map(btn => {
-      if (btn.isReset) {
-        return `<button type="button" data-val="${btn.val}" class="btn-filter-year px-3 py-1.5 rounded-lg text-xs font-bold bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-300 border border-indigo-500/30 transition active:scale-95 cursor-pointer flex items-center gap-1.5"><i data-lucide="rotate-ccw" class="w-3 h-3"></i><span>${btn.label}</span></button>`;
-      } else {
-        return `<button type="button" data-val="${btn.val}" class="btn-filter-year px-3 py-1.5 rounded-lg text-xs font-semibold bg-zinc-900/90 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-800 transition active:scale-95 cursor-pointer">${btn.label}</button>`;
-      }
-    }).join('');
-
-    container.querySelectorAll('.btn-filter-year').forEach(b => {
-      b.addEventListener('click', () => {
-        activeFilterYear = b.getAttribute('data-val');
-        renderYearFilterButtons();
-        renderMonthFilterButtons();
-        loadAttendanceData();
-      });
-    });
-    lucide.createIcons();
+    if (prevVal && Array.from(yearSet).map(String).includes(prevVal)) {
+      selectFilterYear.value = prevVal;
+    } else {
+      selectFilterYear.value = 'ALL';
+    }
   }
 
-  // 2. Render Month Filter Buttons (Max 6 per row -> exactly 2 rows for 12 items)
-  function renderMonthFilterButtons() {
-    const container = document.getElementById('filterButtonsMonth');
-    const badge = document.getElementById('badgeActiveMonth');
-    if (!container) return;
+  function populateDayFilter(year, month) {
+    const selectFilterDay = document.getElementById('selectFilterDay');
+    if (!selectFilterDay) return;
 
-    const allMonths = [
-      { val: '01', name: 'Januari' },
-      { val: '02', name: 'Februari' },
-      { val: '03', name: 'Maret' },
-      { val: '04', name: 'April' },
-      { val: '05', name: 'Mei' },
-      { val: '06', name: 'Juni' },
-      { val: '07', name: 'Juli' },
-      { val: '08', name: 'Agustus' },
-      { val: '09', name: 'September' },
-      { val: '10', name: 'Oktober' },
-      { val: '11', name: 'November' },
-      { val: '12', name: 'Desember' }
-    ];
+    const prevVal = selectFilterDay.value;
+    selectFilterDay.innerHTML = '<option value="ALL">Semua Tanggal</option>';
 
-    // Constrain if year 2026 selected: starting August
-    const monthList = (activeFilterYear === '2026')
-      ? allMonths.filter(m => parseInt(m.val, 10) >= 8)
-      : allMonths;
+    if (!month || month === 'ALL') return;
 
-    const activeObj = allMonths.find(m => m.val === activeFilterMonth);
-    if (badge) {
-      badge.textContent = activeFilterMonth === 'ALL' ? 'Aktif: Semua Bulan' : `Aktif: ${activeObj ? activeObj.name : activeFilterMonth}`;
-    }
+    const y = (year && year !== 'ALL') ? parseInt(year, 10) : new Date().getFullYear();
+    const m = parseInt(month, 10);
+    const daysInMonth = new Date(y, m, 0).getDate();
 
-    // Build buttons: omit activeFilterMonth; if not ALL, put "Semua Bulan" at the very beginning
-    const buttons = [];
-    if (activeFilterMonth !== 'ALL') {
-      buttons.push({ val: 'ALL', label: 'Semua Bulan', isReset: true });
-    }
-    monthList.forEach(m => {
-      if (m.val !== activeFilterMonth) {
-        buttons.push({ val: m.val, label: m.name, isReset: false });
-      }
-    });
-
-    container.innerHTML = buttons.map(btn => {
-      if (btn.isReset) {
-        return `<button type="button" data-val="${btn.val}" class="btn-filter-month px-2.5 py-1.5 rounded-lg text-xs font-bold bg-blue-500/15 hover:bg-blue-500/25 text-blue-300 border border-blue-500/30 transition active:scale-95 cursor-pointer text-center truncate flex items-center justify-center gap-1"><i data-lucide="rotate-ccw" class="w-3 h-3 shrink-0"></i><span class="truncate">${btn.label}</span></button>`;
-      } else {
-        return `<button type="button" data-val="${btn.val}" class="btn-filter-month px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-zinc-900/90 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-800 transition active:scale-95 cursor-pointer text-center truncate">${btn.label}</button>`;
-      }
-    }).join('');
-
-    container.querySelectorAll('.btn-filter-month').forEach(b => {
-      b.addEventListener('click', () => {
-        activeFilterMonth = b.getAttribute('data-val');
-        renderMonthFilterButtons();
-        loadAttendanceData();
-      });
-    });
-    lucide.createIcons();
-  }
-
-  // 3. Render Week Filter Buttons (4 Minggu)
-  function renderWeekFilterButtons() {
-    const container = document.getElementById('filterButtonsWeek');
-    const badge = document.getElementById('badgeActiveWeek');
-    if (!container) return;
-
-    const allWeeks = [
-      { val: 'W1', name: 'Minggu 1 (Tgl 01 - 07)' },
-      { val: 'W2', name: 'Minggu 2 (Tgl 08 - 14)' },
-      { val: 'W3', name: 'Minggu 3 (Tgl 15 - 21)' },
-      { val: 'W4', name: 'Minggu 4 (Tgl 22 - Akhir)' }
-    ];
-
-    const activeObj = allWeeks.find(w => w.val === activeFilterWeek);
-    if (badge) {
-      badge.textContent = activeFilterWeek === 'ALL' ? 'Aktif: Semua Minggu' : `Aktif: ${activeObj ? activeObj.name : activeFilterWeek}`;
-    }
-
-    const buttons = [];
-    if (activeFilterWeek !== 'ALL') {
-      buttons.push({ val: 'ALL', label: 'Semua Minggu', isReset: true });
-    }
-    allWeeks.forEach(w => {
-      if (w.val !== activeFilterWeek) {
-        buttons.push({ val: w.val, label: w.name, isReset: false });
-      }
-    });
-
-    container.innerHTML = buttons.map(btn => {
-      if (btn.isReset) {
-        return `<button type="button" data-val="${btn.val}" class="btn-filter-week px-2.5 py-1.5 rounded-lg text-xs font-bold bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 transition active:scale-95 cursor-pointer text-center truncate flex items-center justify-center gap-1"><i data-lucide="rotate-ccw" class="w-3 h-3 shrink-0"></i><span class="truncate">${btn.label}</span></button>`;
-      } else {
-        return `<button type="button" data-val="${btn.val}" class="btn-filter-week px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-zinc-900/90 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-800 transition active:scale-95 cursor-pointer text-center truncate">${btn.label}</button>`;
-      }
-    }).join('');
-
-    container.querySelectorAll('.btn-filter-week').forEach(b => {
-      b.addEventListener('click', () => {
-        activeFilterWeek = b.getAttribute('data-val');
-        renderWeekFilterButtons();
-        loadAttendanceData();
-      });
-    });
-    lucide.createIcons();
-  }
-
-  // 4. Render Day Filter Buttons (Maksimal 6 per baris mendatar seperti kalender)
-  function renderDayFilterButtons() {
-    const container = document.getElementById('filterButtonsDay');
-    const badge = document.getElementById('badgeActiveDay');
-    if (!container) return;
-
-    if (badge) {
-      badge.textContent = activeFilterDay === 'ALL' ? 'Aktif: Semua Tanggal' : `Aktif: Tanggal ${activeFilterDay}`;
-    }
-
-    const buttons = [];
-    if (activeFilterDay !== 'ALL') {
-      buttons.push({ val: 'ALL', label: 'Semua Tgl', isReset: true });
-    }
-    for (let d = 1; d <= 31; d++) {
+    for (let d = 1; d <= daysInMonth; d++) {
       const dayStr = String(d).padStart(2, '0');
-      if (dayStr !== activeFilterDay) {
-        buttons.push({ val: dayStr, label: `Tgl ${dayStr}`, isReset: false });
-      }
+      const opt = document.createElement('option');
+      opt.value = dayStr;
+      opt.textContent = `Tanggal ${dayStr}`;
+      selectFilterDay.appendChild(opt);
     }
 
-    container.innerHTML = buttons.map(btn => {
-      if (btn.isReset) {
-        return `<button type="button" data-val="${btn.val}" class="btn-filter-day px-2 py-1.5 rounded-lg text-xs font-bold bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 transition active:scale-95 cursor-pointer text-center truncate flex items-center justify-center gap-1"><i data-lucide="rotate-ccw" class="w-3 h-3 shrink-0"></i><span class="truncate">${btn.label}</span></button>`;
-      } else {
-        return `<button type="button" data-val="${btn.val}" class="btn-filter-day px-2 py-1.5 rounded-lg text-xs font-semibold bg-zinc-900/90 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-800 transition active:scale-95 cursor-pointer text-center truncate">${btn.label}</button>`;
-      }
-    }).join('');
-
-    container.querySelectorAll('.btn-filter-day').forEach(b => {
-      b.addEventListener('click', () => {
-        activeFilterDay = b.getAttribute('data-val');
-        renderDayFilterButtons();
-        loadAttendanceData();
-      });
-    });
-    lucide.createIcons();
+    if (prevVal && prevVal !== 'ALL' && parseInt(prevVal, 10) <= daysInMonth) {
+      selectFilterDay.value = prevVal;
+    } else {
+      selectFilterDay.value = 'ALL';
+    }
   }
 
   function initPeriodFilters() {
     const filterSearch = document.getElementById('filterSearch');
+    const selectFilterYear = document.getElementById('selectFilterYear');
+    const selectFilterMonth = document.getElementById('selectFilterMonth');
+    const selectFilterWeek = document.getElementById('selectFilterWeek');
+    const selectFilterDay = document.getElementById('selectFilterDay');
+    const containerFilterWeek = document.getElementById('containerFilterWeek');
+    const containerFilterDay = document.getElementById('containerFilterDay');
+
     const btnResetFilter = document.getElementById('btnResetFilter');
     const btnExportCsv = document.getElementById('btnExportCsv');
     const btnResetData = document.getElementById('btnResetData');
 
-    renderYearFilterButtons();
-    renderMonthFilterButtons();
-    renderWeekFilterButtons();
-    renderDayFilterButtons();
+    populateYearFilter();
+
+    function updateMonthConditionalVisibility() {
+      const monthVal = selectFilterMonth ? selectFilterMonth.value : 'ALL';
+      const yearVal = selectFilterYear ? selectFilterYear.value : 'ALL';
+
+      if (monthVal !== 'ALL') {
+        if (containerFilterWeek) containerFilterWeek.classList.remove('hidden');
+        if (containerFilterDay) containerFilterDay.classList.remove('hidden');
+        populateDayFilter(yearVal, monthVal);
+      } else {
+        if (containerFilterWeek) containerFilterWeek.classList.add('hidden');
+        if (containerFilterDay) containerFilterDay.classList.add('hidden');
+        if (selectFilterWeek) selectFilterWeek.value = 'ALL';
+        if (selectFilterDay) selectFilterDay.value = 'ALL';
+      }
+    }
+
+    if (selectFilterMonth) {
+      selectFilterMonth.addEventListener('change', () => {
+        updateMonthConditionalVisibility();
+        loadAttendanceData();
+      });
+    }
+
+    if (selectFilterYear) {
+      selectFilterYear.addEventListener('change', () => {
+        const monthVal = selectFilterMonth ? selectFilterMonth.value : 'ALL';
+        if (monthVal !== 'ALL') {
+          populateDayFilter(selectFilterYear.value, monthVal);
+        }
+        loadAttendanceData();
+      });
+    }
+
+    if (selectFilterWeek) {
+      selectFilterWeek.addEventListener('change', () => {
+        loadAttendanceData();
+      });
+    }
+
+    if (selectFilterDay) {
+      selectFilterDay.addEventListener('change', () => {
+        loadAttendanceData();
+      });
+    }
 
     if (filterSearch) {
       filterSearch.addEventListener('input', () => {
@@ -1663,16 +1603,14 @@
 
     if (btnResetFilter) {
       btnResetFilter.addEventListener('click', () => {
-        activeFilterYear = 'ALL';
-        activeFilterMonth = 'ALL';
-        activeFilterWeek = 'ALL';
-        activeFilterDay = 'ALL';
         if (filterSearch) filterSearch.value = '';
-        renderYearFilterButtons();
-        renderMonthFilterButtons();
-        renderWeekFilterButtons();
-        renderDayFilterButtons();
+        if (selectFilterYear) selectFilterYear.value = 'ALL';
+        if (selectFilterMonth) selectFilterMonth.value = 'ALL';
+        if (selectFilterWeek) selectFilterWeek.value = 'ALL';
+        if (selectFilterDay) selectFilterDay.value = 'ALL';
+        updateMonthConditionalVisibility();
         loadAttendanceData();
+        showToast('Filter Direset', 'Semua filter dikembalikan ke Semua Waktu.');
       });
     }
 
@@ -1691,14 +1629,12 @@
         saveTokens([]);
         createNewActiveToken('MASUK');
         createNewActiveToken('KELUAR');
-        activeFilterYear = 'ALL';
-        activeFilterMonth = 'ALL';
-        activeFilterWeek = 'ALL';
-        activeFilterDay = 'ALL';
-        renderYearFilterButtons();
-        renderMonthFilterButtons();
-        renderWeekFilterButtons();
-        renderDayFilterButtons();
+        if (filterSearch) filterSearch.value = '';
+        if (selectFilterYear) selectFilterYear.value = 'ALL';
+        if (selectFilterMonth) selectFilterMonth.value = 'ALL';
+        if (selectFilterWeek) selectFilterWeek.value = 'ALL';
+        if (selectFilterDay) selectFilterDay.value = 'ALL';
+        updateMonthConditionalVisibility();
         loadAttendanceData();
         showToast('Data Direset', 'Seluruh data presensi telah dikosongkan.');
       });
@@ -1713,15 +1649,20 @@
     const metricMasukCount = document.getElementById('metricMasukCount');
     const metricKeluarCount = document.getElementById('metricKeluarCount');
     const metricTotalAllTime = document.getElementById('metricTotalAllTime');
+
+    const selectFilterYear = document.getElementById('selectFilterYear');
+    const selectFilterMonth = document.getElementById('selectFilterMonth');
+    const selectFilterWeek = document.getElementById('selectFilterWeek');
+    const selectFilterDay = document.getElementById('selectFilterDay');
     const filterSearch = document.getElementById('filterSearch');
 
     if (!attendanceTableBody) return;
 
     const all = getStoredAttendances();
-    const selectedYear = activeFilterYear;
-    const selectedMonth = activeFilterMonth;
-    const selectedWeek = activeFilterWeek;
-    const selectedDay = activeFilterDay;
+    const selectedYear = selectFilterYear ? selectFilterYear.value : 'ALL';
+    const selectedMonth = selectFilterMonth ? selectFilterMonth.value : 'ALL';
+    const selectedWeek = (selectFilterWeek && selectFilterMonth && selectFilterMonth.value !== 'ALL') ? selectFilterWeek.value : 'ALL';
+    const selectedDay = (selectFilterDay && selectFilterMonth && selectFilterMonth.value !== 'ALL') ? selectFilterDay.value : 'ALL';
     const searchTerm = filterSearch ? filterSearch.value.trim().toLowerCase() : '';
 
     // Apply combined filters (Strictly starting from August 2026)
