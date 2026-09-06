@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Presensi Kehadiran - Smart QR</title>
+  <title>Web Absensi Kehadiran - Smart QR</title>
   
   <style>
     .hidden { display: none !important; }
@@ -184,7 +184,7 @@
         </div>
         <div>
           <h1 class="font-extrabold text-sm text-white leading-none">Smart Attendance</h1>
-          <span class="text-[11px] text-zinc-400">Verifikasi Presensi 1x Scan</span>
+          <span class="text-[11px] text-zinc-400">Verifikasi Absensi 1x Scan</span>
         </div>
       </div>
       <a href="index.html" class="text-xs px-3 py-1.5 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] text-zinc-200 transition flex items-center gap-1.5 border border-white/10 font-semibold">
@@ -212,7 +212,7 @@
         </div>
         <div>
           <h2 class="text-base font-bold text-white">Scan QR Code Proyektor</h2>
-          <p class="text-xs text-zinc-400 mt-0.5">Arahkan kamera ke layar admin untuk mendeteksi token presensi.</p>
+          <p class="text-xs text-zinc-400 mt-0.5">Arahkan kamera ke layar admin untuk mendeteksi token absen.</p>
         </div>
 
         <!-- Regional Date Info (WIB Full Text) -->
@@ -268,7 +268,7 @@
 
         <div>
           <h2 class="text-xl font-extrabold text-white tracking-tight">Konfirmasi Kehadiran</h2>
-          <p class="text-xs text-zinc-400 mt-0.5">Lengkapi nama lengkap Anda untuk mencatat presensi.</p>
+          <p class="text-xs text-zinc-400 mt-0.5">Lengkapi nama lengkap Anda untuk mencatat absen.</p>
         </div>
 
         <form id="attendanceForm" class="space-y-4">
@@ -284,8 +284,7 @@
           <!-- Locked Date (Tamper-proof on iOS Safari) -->
           <div class="p-3 bg-[#161a28] rounded-2xl border border-white/10 text-xs select-none pointer-events-none space-y-1.5 shadow-sm">
             <div class="flex items-center justify-between text-zinc-400 text-[11px]">
-              <span>Tanggal Presensi (Regional Area WIB)</span>
-              <span class="text-emerald-400 font-bold flex items-center gap-1">🔒 Terkunci Hari Ini</span>
+              <span>Tanggal Absen</span>
             </div>
             <div class="flex items-center gap-2 text-sm font-bold text-zinc-100">
               <i data-lucide="calendar" class="w-4 h-4 text-emerald-400"></i>
@@ -306,7 +305,7 @@
           <button type="submit" id="btnSubmit"
             class="w-full py-3.5 px-4 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-extrabold text-xs rounded-2xl shadow-lg shadow-emerald-500/25 transition flex items-center justify-center gap-2 active:scale-[0.99]">
             <i data-lucide="check" class="w-4 h-4"></i>
-            <span>Kirim Presensi Sekarang</span>
+            <span>Kirim Absen Sekarang</span>
           </button>
         </form>
       </div>
@@ -318,7 +317,7 @@
         </div>
 
         <div>
-          <h3 class="text-lg font-bold text-white tracking-tight">Presensi Berhasil</h3>
+          <h3 class="text-lg font-bold text-white tracking-tight">Absensi Berhasil</h3>
           <p class="text-xs text-zinc-400 mt-0.5">Kehadiran Anda telah tervalidasi di sistem.</p>
         </div>
 
@@ -332,7 +331,7 @@
             <span id="summaryDate" class="text-zinc-300 font-mono"></span>
           </div>
           <div class="flex justify-between">
-            <span class="text-zinc-400">Jam Presensi</span>
+            <span class="text-zinc-400">Jam Absen</span>
             <span id="summaryTime" class="text-emerald-400 font-semibold font-mono"></span>
           </div>
           <div class="flex justify-between">
@@ -372,7 +371,7 @@
 
         <div class="space-y-2">
           <span class="text-[10px] font-mono font-bold px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 uppercase tracking-wide">
-            Presensi Keluar Selesai
+            Absen Keluar Selesai
           </span>
           <h3 class="text-lg sm:text-xl font-extrabold text-white tracking-tight leading-snug">
             "Terimakasih sudah absen, konsistensimu membantu kehidupanmu"

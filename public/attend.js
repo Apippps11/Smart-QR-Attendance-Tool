@@ -1,5 +1,5 @@
 /**
- * Presensi Kehadiran Peserta (attend.js)
+ * Absensi Kehadiran Peserta (attend.js)
  * Fitur:
  * 1. Verifikasi Token QR 1x Pakai
  * 2. Kunci Tanggal Regional Otomatis (Anti-Ubah di iOS / Safari / Android)
@@ -161,7 +161,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   lucide.createIcons();
   setTimeout(() => inputName.focus(), 200);
 
-  // --- SUBMIT PRESENSI (Sistem Waktu Mutlak - Anti-Ubah Tanggal) ---
+  // --- SUBMIT ABSENSI (Sistem Waktu Mutlak - Anti-Ubah Tanggal) ---
   attendanceForm.addEventListener('submit', async (e) => {
     e.preventDefault();
 
@@ -210,7 +210,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (!response.ok || !result.success) {
           btnSubmit.disabled = false;
           btnSubmit.innerHTML = originalBtnText;
-          alert('Presensi Ditolak:\n\n' + (result.error || 'Terjadi kesalahan sistem.'));
+          alert('Absen Ditolak:\n\n' + (result.error || 'Terjadi kesalahan sistem.'));
           if (response.status === 409) {
             formSection.classList.add('hidden');
             errorSection.classList.remove('hidden');
@@ -246,14 +246,14 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (!res.success) {
               btnSubmit.disabled = false;
               btnSubmit.innerHTML = originalBtnText;
-              alert('Presensi Ditolak:\n\n' + res.error);
+              alert('Absen Ditolak:\n\n' + res.error);
               return;
             }
             renderSuccessScreen(res.attendance);
           } catch (e) {
             btnSubmit.disabled = false;
             btnSubmit.innerHTML = originalBtnText;
-            alert('Gagal memproses respon presensi.');
+            alert('Gagal memproses respon absensi.');
           }
         }
       });
@@ -280,7 +280,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (existing) {
           btnSubmit.disabled = false;
           btnSubmit.innerHTML = originalBtnText;
-          alert(`Presensi Masuk Ditolak:\n\nPerangkat ini sudah tercatat melakukan Absensi Masuk hari ini atas nama "${existing.name}". 1 perangkat hanya bisa absen masuk 1 kali per hari.`);
+          alert(`Absen Masuk Ditolak:\n\nPerangkat ini sudah tercatat melakukan Absen Masuk hari ini atas nama "${existing.name}". 1 perangkat hanya bisa absen masuk 1 kali per hari.`);
           return;
         }
       } else if (currentType === 'KELUAR') {
@@ -288,20 +288,20 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (!masukRecord) {
           btnSubmit.disabled = false;
           btnSubmit.innerHTML = originalBtnText;
-          alert('Presensi Keluar Ditolak:\n\nPerangkat Anda belum tercatat melakukan Absensi Masuk hari ini. Silakan lakukan Absensi Masuk terlebih dahulu.');
+          alert('Absen Keluar Ditolak:\n\nPerangkat Anda belum tercatat melakukan Absen Masuk hari ini. Silakan lakukan Absen Masuk terlebih dahulu.');
           return;
         }
         if (masukRecord.name.trim().toLowerCase() !== payload.name.trim().toLowerCase()) {
           btnSubmit.disabled = false;
           btnSubmit.innerHTML = originalBtnText;
-          alert(`Presensi Keluar Ditolak:\n\nNama ("${payload.name}") tidak cocok dengan data saat Absensi Masuk ("${masukRecord.name}").`);
+          alert(`Absen Keluar Ditolak:\n\nNama ("${payload.name}") tidak cocok dengan data saat Absen Masuk ("${masukRecord.name}").`);
           return;
         }
         const existingKeluar = attendances.find(a => a.device_id === deviceId && a.date === payload.date && a.type === 'KELUAR');
         if (existingKeluar) {
           btnSubmit.disabled = false;
           btnSubmit.innerHTML = originalBtnText;
-          alert(`Presensi Keluar Ditolak:\n\nPerangkat ini sudah tercatat melakukan Absensi Keluar hari ini pada pukul ${existingKeluar.time} WIB.`);
+          alert(`Absen Keluar Ditolak:\n\nPerangkat ini sudah tercatat melakukan Absen Keluar hari ini pada pukul ${existingKeluar.time} WIB.`);
           return;
         }
       }
@@ -312,7 +312,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (!targetToken || targetToken.status !== 'ACTIVE') {
         btnSubmit.disabled = false;
         btnSubmit.innerHTML = originalBtnText;
-        alert('Presensi Ditolak:\n\nQR Code tidak valid atau baru saja digunakan oleh pengguna lain.');
+        alert('Absen Ditolak:\n\nQR Code tidak valid atau baru saja digunakan oleh pengguna lain.');
         return;
       }
 
@@ -344,7 +344,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     } catch (e) {
       btnSubmit.disabled = false;
       btnSubmit.innerHTML = originalBtnText;
-      alert('Gagal menyimpan presensi lokal.');
+      alert('Gagal menyimpan absensi lokal.');
     }
   }
 
@@ -405,9 +405,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     const startFormatted = formatGCalDateTime(startDate);
     const endFormatted = formatGCalDateTime(endDate);
 
-    const title = `Presensi ${isKeluar ? 'Keluar' : 'Masuk'}: ${name}`;
-    const description = `Bukti Kehadiran Resmi Smart QR Attendance.\n\nJenis: Presensi ${isKeluar ? 'Keluar' : 'Masuk'}\nNama: ${name}\nHari: ${day}\nTanggal: ${date}\nJam: ${time} WIB\nToken: ${token}`;
-    const location = 'Sistem Presensi Smart QR';
+    const title = `Absen ${isKeluar ? 'Keluar' : 'Masuk'}: ${name}`;
+    const description = `Bukti Kehadiran Resmi Smart QR Attendance.\n\nJenis: Absen ${isKeluar ? 'Keluar' : 'Masuk'}\nNama: ${name}\nHari: ${day}\nTanggal: ${date}\nJam: ${time} WIB\nToken: ${token}`;
+    const location = 'Sistem Absensi Smart QR';
 
     btnGoogleCalendar.href = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(title)}&dates=${startFormatted}/${endFormatted}&details=${encodeURIComponent(description)}&location=${encodeURIComponent(location)}`;
 
@@ -435,7 +435,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
       const link = document.createElement('a');
       link.href = window.URL.createObjectURL(blob);
-      link.setAttribute('download', `Presensi_${isKeluar ? 'Keluar' : 'Masuk'}-${name.replace(/\s+/g, '_')}-${date}.ics`);
+      link.setAttribute('download', `Absen_${isKeluar ? 'Keluar' : 'Masuk'}-${name.replace(/\s+/g, '_')}-${date}.ics`);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);

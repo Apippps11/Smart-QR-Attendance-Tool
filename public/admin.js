@@ -4,7 +4,7 @@
  * 1. Keamanan Layar Admin Multi-Browser & Anti-Bypass iOS Safari (BFCache Hard-Lock)
  * 2. Kunci Tanggal Regional Mutlak (Anti-Tamper di iOS/Android)
  * 3. Live Camera Scanning Murni (Upload Foto Dihapus)
- * 4. Riwayat Presensi Permanen (Data Hari Sebelumnya Tidak Pernah Hilang)
+ * 4. Riwayat Absensi Permanen (Data Hari Sebelumnya Tidak Pernah Hilang)
  * 5. Filter Riwayat Lengkap: Semua Waktu, Tahun, Bulan, Mingguan, Harian, dan Pencarian
  * 6. Tampilan Data Multi-Tab: Absensi Utama (Rekap Masuk & Keluar), Masuk, Keluar
  * 7. Real-time Multi-Provider Cloud Sync (MQTT WSS) & Export CSV
@@ -709,7 +709,7 @@
         if (currentAttendanceType === 'KELUAR') {
           inlineTypeBadge.textContent = 'KELUAR';
           inlineTypeBadge.className = 'text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-rose-500/10 text-rose-400 border border-rose-500/20 uppercase';
-          inlineFormTitle.textContent = 'Presensi Keluar (Pulang)';
+          inlineFormTitle.textContent = 'Absen Keluar (Pulang)';
           inlineFormSubtitle.textContent = 'Masukkan nama yang sama persis saat Anda Absensi Masuk.';
           inlineKeluarNotice.classList.remove('hidden');
         } else {
@@ -796,7 +796,7 @@
           btnSubmitInline.disabled = false;
           btnSubmitInline.innerHTML = origText;
           if (!data.success) {
-            alert('Presensi Ditolak:\n\n' + data.error);
+            alert('Absen Ditolak:\n\n' + data.error);
             return;
           }
           renderInlineSuccess(data.attendance);
@@ -836,12 +836,12 @@
               try {
                 const res = JSON.parse(message.toString());
                 if (!res.success) {
-                  alert('Presensi Ditolak:\n\n' + res.error);
+                  alert('Absen Ditolak:\n\n' + res.error);
                   return;
                 }
                 renderInlineSuccess(res.attendance);
               } catch (err) {
-                alert('Gagal memproses respon presensi.');
+                alert('Gagal memproses respon absensi.');
               } finally {
                 try { userMqtt.end(); } catch(e) {}
               }
@@ -856,7 +856,7 @@
               btnSubmitInline.disabled = false;
               btnSubmitInline.innerHTML = origText;
               if (!fallbackResult.success) {
-                alert('Presensi Ditolak:\n\n' + fallbackResult.error);
+                alert('Absen Ditolak:\n\n' + fallbackResult.error);
                 return;
               }
               renderInlineSuccess(fallbackResult.attendance);
@@ -873,7 +873,7 @@
       btnSubmitInline.innerHTML = origText;
 
       if (!result.success) {
-        alert('Presensi Ditolak:\n\n' + result.error);
+        alert('Absen Ditolak:\n\n' + result.error);
         return;
       }
 
@@ -964,9 +964,9 @@
       const startFormatted = formatGCalDateTime(startDate);
       const endFormatted = formatGCalDateTime(endDate);
 
-      const title = `Presensi ${isKeluar ? 'Keluar' : 'Masuk'}: ${name}`;
-      const description = `Bukti Kehadiran Resmi Smart QR Attendance.\n\nJenis: Presensi ${isKeluar ? 'Keluar' : 'Masuk'}\nNama: ${name}\nHari: ${day}\nTanggal: ${date}\nJam: ${time} WIB\nToken: ${token}`;
-      const location = `Sistem Presensi Smart QR`;
+      const title = `Absen ${isKeluar ? 'Keluar' : 'Masuk'}: ${name}`;
+      const description = `Bukti Kehadiran Resmi Smart QR Attendance.\n\nJenis: Absen ${isKeluar ? 'Keluar' : 'Masuk'}\nNama: ${name}\nHari: ${day}\nTanggal: ${date}\nJam: ${time} WIB\nToken: ${token}`;
+      const location = `Sistem Absensi Smart QR`;
 
       const gcalUrl = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(title)}&dates=${startFormatted}/${endFormatted}&details=${encodeURIComponent(description)}&location=${encodeURIComponent(location)}`;
       inlineBtnGCal.href = gcalUrl;
@@ -995,7 +995,7 @@
         const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
         const link = document.createElement('a');
         link.href = window.URL.createObjectURL(blob);
-        link.setAttribute('download', `Presensi_${isKeluar ? 'Keluar' : 'Masuk'}-${name.replace(/\s+/g, '_')}-${date}.ics`);
+        link.setAttribute('download', `Absen_${isKeluar ? 'Keluar' : 'Masuk'}-${name.replace(/\s+/g, '_')}-${date}.ics`);
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -1033,7 +1033,7 @@
     if (date && date !== todayRegional) {
       return {
         success: false,
-        error: `Kunci Waktu Regional Aktif: Presensi hanya berlaku untuk hari ini (${todayRegional}).`
+        error: `Kunci Waktu Regional Aktif: Absen hanya berlaku untuk hari ini (${todayRegional}).`
       };
     }
 
@@ -1046,7 +1046,7 @@
       if (existingMasuk) {
         return {
           success: false,
-          error: `Perangkat ini sudah tercatat melakukan Absensi Masuk hari ini atas nama "${existingMasuk.name}" pada pukul ${existingMasuk.time} WIB. 1 perangkat hanya bisa absen masuk 1 kali per hari!`
+          error: `Perangkat ini sudah tercatat melakukan Absen Masuk hari ini atas nama "${existingMasuk.name}" pada pukul ${existingMasuk.time} WIB. 1 perangkat hanya bisa absen masuk 1 kali per hari!`
         };
       }
     }
@@ -1058,7 +1058,7 @@
       if (!masukRecord) {
         return {
           success: false,
-          error: 'Presensi Keluar Ditolak: Perangkat Anda belum tercatat melakukan Absensi Masuk hari ini. Silakan lakukan Absensi Masuk terlebih dahulu!'
+          error: 'Absen Keluar Ditolak: Perangkat Anda belum tercatat melakukan Absen Masuk hari ini. Silakan lakukan Absen Masuk terlebih dahulu!'
         };
       }
 
@@ -1066,7 +1066,7 @@
       if (masukRecord.name.trim().toLowerCase() !== name.trim().toLowerCase()) {
         return {
           success: false,
-          error: `Presensi Keluar Ditolak: Nama ("${name}") tidak cocok dengan data saat Absensi Masuk ("${masukRecord.name}"). Harap gunakan nama yang sama persis!`
+          error: `Absen Keluar Ditolak: Nama ("${name}") tidak cocok dengan data saat Absen Masuk ("${masukRecord.name}"). Harap gunakan nama yang sama persis!`
         };
       }
 
@@ -1075,7 +1075,7 @@
       if (existingKeluar) {
         return {
           success: false,
-          error: `Perangkat ini sudah tercatat melakukan Absensi Keluar hari ini pada pukul ${existingKeluar.time} WIB.`
+          error: `Perangkat ini sudah tercatat melakukan Absen Keluar hari ini pada pukul ${existingKeluar.time} WIB.`
         };
       }
     }
@@ -1110,7 +1110,7 @@
 
     // Trigger Audio & Visuals
     playSuccessChime();
-    showToast(`Presensi ${attendType === 'KELUAR' ? 'Keluar' : 'Masuk'} Berhasil`, `${name} telah dicatat.`);
+    showToast(`Absen ${attendType === 'KELUAR' ? 'Keluar' : 'Masuk'} Berhasil`, `${name} telah dicatat.`);
     addLiveActivity(record);
     populateYearFilter();
     loadAttendanceData();
@@ -1622,7 +1622,7 @@
     // Reset Data
     if (btnResetData) {
       btnResetData.addEventListener('click', () => {
-        const conf = confirm('PERINGATAN:\n\nApakah Anda yakin ingin MENGHAPUS SEMUA riwayat data presensi dan token?\nTindakan ini bersifat permanen.');
+        const conf = confirm('PERINGATAN:\n\nApakah Anda yakin ingin MENGHAPUS SEMUA riwayat data absensi dan token?\nTindakan ini bersifat permanen.');
         if (!conf) return;
 
         saveAttendances([]);
@@ -1636,7 +1636,7 @@
         if (selectFilterDay) selectFilterDay.value = 'ALL';
         updateMonthConditionalVisibility();
         loadAttendanceData();
-        showToast('Data Direset', 'Seluruh data presensi telah dikosongkan.');
+        showToast('Data Direset', 'Seluruh data absensi telah dikosongkan.');
       });
     }
   }
@@ -1733,7 +1733,7 @@
 
       const records = filtered.filter(a => a.type === 'MASUK' || !a.type);
       if (records.length === 0) {
-        attendanceTableBody.innerHTML = `<tr><td colspan="6" class="py-12 text-center text-zinc-500 font-medium text-xs">Belum ada data presensi.</td></tr>`;
+        attendanceTableBody.innerHTML = `<tr><td colspan="6" class="py-12 text-center text-zinc-500 font-medium text-xs">Belum ada data absensi.</td></tr>`;
         return;
       }
 
@@ -1765,7 +1765,7 @@
 
       const records = filtered.filter(a => a.type === 'KELUAR');
       if (records.length === 0) {
-        attendanceTableBody.innerHTML = `<tr><td colspan="6" class="py-12 text-center text-zinc-500 font-medium text-xs">Belum ada data presensi.</td></tr>`;
+        attendanceTableBody.innerHTML = `<tr><td colspan="6" class="py-12 text-center text-zinc-500 font-medium text-xs">Belum ada data absensi.</td></tr>`;
         return;
       }
 
@@ -1822,7 +1822,7 @@
 
       const paired = Array.from(groupMap.values());
       if (paired.length === 0) {
-        attendanceTableBody.innerHTML = `<tr><td colspan="7" class="py-12 text-center text-zinc-500 font-medium text-xs">Belum ada data presensi.</td></tr>`;
+        attendanceTableBody.innerHTML = `<tr><td colspan="7" class="py-12 text-center text-zinc-500 font-medium text-xs">Belum ada data absensi.</td></tr>`;
         return;
       }
 
@@ -1858,7 +1858,7 @@
   function exportCsvData() {
     const all = getStoredAttendances();
     if (all.length === 0) {
-      alert('Belum ada data presensi untuk diekspor.');
+      alert('Belum ada data absensi untuk diekspor.');
       return;
     }
 
@@ -1896,11 +1896,11 @@
         `"${p.device_id}"`,
         `"${(p.device_info || '').replace(/"/g, '""')}"`
       ]);
-      downloadCsv(headers, rows, `Rekap_Presensi_Utama_${dateStr}.csv`);
+      downloadCsv(headers, rows, `Rekap_Absensi_Utama_${dateStr}.csv`);
     } else {
       const typeFilter = activeSubTab;
       const filtered = all.filter(a => typeFilter === 'KELUAR' ? a.type === 'KELUAR' : (a.type === 'MASUK' || !a.type));
-      const headers = ['No', 'Tipe Presensi', 'Nama Lengkap', 'Hari', 'Tanggal', 'Jam', 'Token QR', 'Device ID', 'Device Info'];
+      const headers = ['No', 'Tipe Absen', 'Nama Lengkap', 'Hari', 'Tanggal', 'Jam', 'Token QR', 'Device ID', 'Device Info'];
       const rows = filtered.map((att, idx) => [
         idx + 1,
         `"${att.type || 'MASUK'}"`,
@@ -1912,7 +1912,7 @@
         `"${att.device_id}"`,
         `"${(att.device_info || '').replace(/"/g, '""')}"`
       ]);
-      downloadCsv(headers, rows, `Rekap_Presensi_${typeFilter}_${dateStr}.csv`);
+      downloadCsv(headers, rows, `Rekap_Absensi_${typeFilter}_${dateStr}.csv`);
     }
   }
 
@@ -2156,7 +2156,7 @@
     if (btnCopyUrlMasuk && mobileAccessUrlMasuk) {
       btnCopyUrlMasuk.addEventListener('click', () => {
         navigator.clipboard.writeText(mobileAccessUrlMasuk.textContent).then(() => {
-          showToast('Tautan Masuk Disalin', 'URL presensi masuk siap dibagikan.');
+          showToast('Tautan Masuk Disalin', 'URL absen masuk siap dibagikan.');
         });
       });
     }
@@ -2164,7 +2164,7 @@
     if (btnCopyUrlKeluar && mobileAccessUrlKeluar) {
       btnCopyUrlKeluar.addEventListener('click', () => {
         navigator.clipboard.writeText(mobileAccessUrlKeluar.textContent).then(() => {
-          showToast('Tautan Keluar Disalin', 'URL presensi keluar siap dibagikan.');
+          showToast('Tautan Keluar Disalin', 'URL absen keluar siap dibagikan.');
         });
       });
     }
