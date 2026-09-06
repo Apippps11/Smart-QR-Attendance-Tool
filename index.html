@@ -1583,22 +1583,14 @@
                 <span>Simpan Admin Baru</span>
               </button>
             </form>
-
-            <!-- Daftar Admin Terdaftar -->
-            <div class="space-y-2 pt-1">
-              <div class="text-xs font-semibold text-zinc-400">Daftar Akun Admin Aktif:</div>
-              <div id="adminAccountsList" class="space-y-2 max-h-[160px] overflow-y-auto pr-1">
-                <!-- Dynamically populated in admin.js -->
-              </div>
-            </div>
           </div>
 
-          <!-- Card 3: Ganti Akun Admin -->
+          <!-- Card 3: Status & Manajemen Akun Admin (All-in-One: Online Status, Ganti Akun & Hapus) -->
           <div class="bg-[#121624] border border-white/10 rounded-2xl p-5 space-y-4 shadow-lg shadow-black/30 md:col-span-2">
             <div class="flex items-center justify-between border-b border-white/[0.06] pb-3">
               <h3 class="text-sm font-bold text-white flex items-center gap-2">
-                <i data-lucide="repeat" class="w-4 h-4 text-indigo-400"></i>
-                <span>Ganti Akun Admin</span>
+                <i data-lucide="users" class="w-4 h-4 text-indigo-400"></i>
+                <span>Status & Manajemen Akun Admin</span>
               </h3>
               <div class="flex items-center gap-2 text-xs">
                 <span class="text-zinc-400">Sedang Login:</span>
@@ -1606,7 +1598,7 @@
               </div>
             </div>
             <p class="text-xs text-zinc-400 leading-relaxed">
-              Beralih ke akun admin lain tanpa harus logout terlebih dahulu. Akun yang sedang aktif digunakan pada perangkat lain tidak dapat dipilih.
+              Pantau status online setiap akun di seluruh perangkat. Beralih ke akun admin yang tersedia atau hapus akun terdaftar. Akun yang sedang aktif di perangkat lain tidak dapat digunakan di perangkat ini.
             </p>
             <div id="switchAdminList" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pt-1">
               <!-- Dynamically populated in admin.js -->
@@ -1626,120 +1618,8 @@
 
   </div>
 
-  <!-- Instant Password Eye Toggle & Hold Support -->
-  <script>
-    (function initPasswordToggle() {
-      const btn = document.getElementById('btnTogglePassword');
-      const input = document.getElementById('inputPassword');
-      if (!btn || !input || btn._hasHoldListeners) return;
-      btn._hasHoldListeners = true;
-
-      let isDown = false;
-      let startTime = 0;
-      let wasText = false;
-      let lastRelease = 0;
-
-      function setVisibility(show) {
-        input.type = show ? 'text' : 'password';
-        const eyeOpen = document.getElementById('eyeIconOpen');
-        const eyeClosed = document.getElementById('eyeIconClosed');
-        if (eyeOpen && eyeClosed) {
-          if (show) {
-            eyeOpen.classList.add('hidden');
-            eyeClosed.classList.remove('hidden');
-          } else {
-            eyeOpen.classList.remove('hidden');
-            eyeClosed.classList.add('hidden');
-          }
-        }
-        if (show) {
-          btn.classList.add('text-indigo-400', 'bg-indigo-500/20');
-          btn.classList.remove('text-zinc-400');
-          btn.setAttribute('title', 'Sembunyikan Password');
-          btn.setAttribute('aria-label', 'Sembunyikan Password');
-        } else {
-          btn.classList.remove('text-indigo-400', 'bg-indigo-500/20');
-          btn.classList.add('text-zinc-400');
-          btn.setAttribute('title', 'Tekan atau tahan untuk melihat password');
-          btn.setAttribute('aria-label', 'Tekan atau tahan untuk melihat password');
-        }
-      }
-      window.setPasswordVisibility = setVisibility;
-
-      window.toggleAdminPassword = function() {
-        if (!input) return;
-        setVisibility(input.type === 'password');
-        try { input.focus(); } catch (e) {}
-      };
-
-      function onDown(e) {
-        if (e.button && e.button !== 0) return;
-        if (e.cancelable) e.preventDefault();
-        isDown = true;
-        startTime = Date.now();
-        wasText = (input.type === 'text');
-        if (!wasText) {
-          setVisibility(true);
-        }
-      }
-
-      function onUp(e) {
-        if (!isDown) return;
-        isDown = false;
-        lastRelease = Date.now();
-        const duration = Date.now() - startTime;
-        if (duration >= 250) {
-          // Peek mode: revert back upon release
-          setVisibility(wasText);
-        } else {
-          // Tap mode: toggle
-          if (wasText) {
-            setVisibility(false);
-          } else {
-            setVisibility(true);
-          }
-        }
-        try { input.focus(); } catch (err) {}
-      }
-
-      function onCancel() {
-        if (!isDown) return;
-        isDown = false;
-        setVisibility(wasText);
-      }
-
-      btn.addEventListener('pointerdown', onDown);
-      btn.addEventListener('pointerup', onUp);
-      btn.addEventListener('pointercancel', onCancel);
-      btn.addEventListener('pointerleave', onCancel);
-
-      btn.addEventListener('contextmenu', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        return false;
-      });
-
-      btn.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        if (Date.now() - lastRelease > 350) {
-          window.toggleAdminPassword();
-        }
-      });
-
-      if (!window.PointerEvent) {
-        btn.addEventListener('mousedown', onDown);
-        btn.addEventListener('mouseup', onUp);
-        btn.addEventListener('mouseleave', onCancel);
-        btn.addEventListener('touchstart', onDown, { passive: false });
-        btn.addEventListener('touchend', onUp);
-        btn.addEventListener('touchcancel', onCancel);
-      }
-    })();
-  </script>
-
   <!-- Scripts -->
-  <script src="fingerprint.js?v=20260905_4"></script>
-  <script src="admin.js?v=20260905_4"></script>
+  <script src="fingerprint.js?v=20260907_1"></script>
+  <script src="admin.js?v=20260907_1"></script>
 </body>
 </html>

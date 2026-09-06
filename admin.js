@@ -71,12 +71,86 @@
     applyTheme(next);
   }
 
-  // Admin Multi-Account Storage & Defaults
+  // Admin Multi-Account Storage & Real-time Cross-Device Sync
   const STORAGE_ADMIN_ACCOUNTS = 'sqr_admin_accounts';
+  const STORAGE_ADMIN_LAST_UPDATE = 'sqr_admin_last_updated';
+  const MQTT_ADMIN_SYNC_TOPIC = 'smartqr/global/admin_v2_sync';
+  const MQTT_BROKER_WSS = 'wss://broker.emqx.io:8084/mqtt';
   const DEFAULT_ADMIN_ACCOUNTS = [
     { username: 'Admin1118', password: 'AFIFweb18', role: 'Owner', createdAt: '2026-01-01', activeDeviceId: null, deviceInfo: null, isOnline: false, lastLoginAt: null },
     { username: 'Admin2', password: 'AFIFweb18', role: 'Admin', createdAt: '2026-01-01', activeDeviceId: null, deviceInfo: null, isOnline: false, lastLoginAt: null }
   ];
+
+  let cloudAdminSyncClient = null;
+
+  function initAdminCloudSync() {
+    if (typeof mqtt === 'undefined') return;
+    if (cloudAdminSyncClient && (cloudAdminSyncClient.connected || cloudAdminSyncClient.connecting)) return;
+
+    const clientId = 'sqr_admsync_' + Math.random().toString(16).substring(2, 10);
+    try {
+      cloudAdminSyncClient = mqtt.connect(MQTT_BROKER_WSS, {
+        clientId,
+        clean: true,
+        connectTimeout: 8000,
+        reconnectPeriod: 4000
+      });
+
+      cloudAdminSyncClient.on('connect', () => {
+        cloudAdminSyncClient.subscribe(MQTT_ADMIN_SYNC_TOPIC, { qos: 1 });
+      });
+
+      cloudAdminSyncClient.on('message', (topic, msgBuffer) => {
+        if (topic === MQTT_ADMIN_SYNC_TOPIC) {
+          try {
+            const data = JSON.parse(msgBuffer.toString());
+            if (data && Array.isArray(data.accounts) && data.accounts.length > 0) {
+              const currentDev = window.DeviceFingerprint ? window.DeviceFingerprint.getDeviceInfo() : { deviceId: 'dev_local', deviceInfo: 'Perangkat Ini' };
+              const localLastUpdate = parseInt(localStorage.getItem(STORAGE_ADMIN_LAST_UPDATE) || '0', 10);
+              const incomingTime = data.timestamp || 0;
+
+              // If from another device and not older than our last modification
+              if (data.fromDeviceId !== currentDev.deviceId && incomingTime >= localLastUpdate) {
+                localStorage.setItem(STORAGE_ADMIN_ACCOUNTS, JSON.stringify(data.accounts));
+                localStorage.setItem(STORAGE_ADMIN_LAST_UPDATE, String(incomingTime));
+                checkAuthStatus();
+                renderSwitchAdminList();
+              } else if (data.fromDeviceId !== currentDev.deviceId && localLastUpdate > incomingTime) {
+                // Local state is newer than the cloud broker retained message, update cloud
+                broadcastAdminAccountsSync(getAdminAccounts(), localLastUpdate);
+              }
+            }
+          } catch (err) {}
+        }
+      });
+    } catch (e) {}
+  }
+
+  // Trigger early cloud sync if MQTT library is already loaded
+  if (typeof mqtt !== 'undefined') {
+    initAdminCloudSync();
+  }
+
+  function broadcastAdminAccountsSync(accounts, timestamp) {
+    if (!cloudAdminSyncClient || !cloudAdminSyncClient.connected) {
+      initAdminCloudSync();
+    }
+    const currentDev = window.DeviceFingerprint ? window.DeviceFingerprint.getDeviceInfo() : { deviceId: 'dev_local', deviceInfo: 'Perangkat Ini' };
+    const ts = timestamp || Date.now();
+    try {
+      localStorage.setItem(STORAGE_ADMIN_LAST_UPDATE, String(ts));
+    } catch (e) {}
+
+    if (cloudAdminSyncClient && cloudAdminSyncClient.connected) {
+      try {
+        cloudAdminSyncClient.publish(MQTT_ADMIN_SYNC_TOPIC, JSON.stringify({
+          accounts,
+          timestamp: ts,
+          fromDeviceId: currentDev.deviceId
+        }), { retain: true, qos: 1 });
+      } catch (err) {}
+    }
+  }
 
   function getAdminAccounts() {
     try {
@@ -111,10 +185,15 @@
     }
   }
 
-  function saveAdminAccounts(accounts) {
+  function saveAdminAccounts(accounts, skipBroadcast = false) {
+    const ts = Date.now();
     try {
       localStorage.setItem(STORAGE_ADMIN_ACCOUNTS, JSON.stringify(accounts));
+      localStorage.setItem(STORAGE_ADMIN_LAST_UPDATE, String(ts));
     } catch (e) {}
+    if (!skipBroadcast) {
+      broadcastAdminAccountsSync(accounts, ts);
+    }
   }
 
   // State
@@ -375,8 +454,9 @@
       btnThemeToggleGate.addEventListener('click', toggleTheme);
     }
 
-    // Run auth check immediately
+    // Run auth check & cloud sync immediately
     checkAuthStatus();
+    initAdminCloudSync();
 
     // Set Regional Date for Gate & Choice modals immediately
     const today = new Date();
@@ -436,7 +516,7 @@
     const inlineBtnIcs = document.getElementById('inlineBtnIcs');
     const btnFinishInline = document.getElementById('btnFinishInline');
 
-    // Helper: Atur visibilitas karakter password
+    // Helper: Atur visibilitas karakter password GateModal
     function setPasswordVisibility(show) {
       if (!inputPassword) return;
       inputPassword.type = show ? 'text' : 'password';
@@ -453,115 +533,37 @@
       }
       if (btnTogglePassword) {
         if (show) {
-          btnTogglePassword.classList.add('text-indigo-400', 'bg-indigo-500/20');
+          btnTogglePassword.classList.add('text-indigo-400');
           btnTogglePassword.classList.remove('text-zinc-400');
           btnTogglePassword.setAttribute('title', 'Sembunyikan Password');
-          btnTogglePassword.setAttribute('aria-label', 'Sembunyikan Password');
         } else {
-          btnTogglePassword.classList.remove('text-indigo-400', 'bg-indigo-500/20');
+          btnTogglePassword.classList.remove('text-indigo-400');
           btnTogglePassword.classList.add('text-zinc-400');
           btnTogglePassword.setAttribute('title', 'Tekan atau tahan untuk melihat password');
-          btnTogglePassword.setAttribute('aria-label', 'Tekan atau tahan untuk melihat password');
         }
       }
     }
     window.setPasswordVisibility = setPasswordVisibility;
 
-    // Expose globally so inline onclick handler on button also works seamlessly
-    window.toggleAdminPassword = function() {
-      if (!inputPassword) return;
-      const shouldShow = inputPassword.type === 'password';
-      setPasswordVisibility(shouldShow);
-      try { inputPassword.focus(); } catch (e) {}
-    };
+    // Cross-Platform Universal Password Eye Toggle Helper (Tap to toggle, press-and-hold to peek)
+    function setupPasswordEyeToggle(btnEl, inputEl, openIconEl, closedIconEl) {
+      if (!btnEl || !inputEl || btnEl._hasEyeSetup) return;
+      btnEl._hasEyeSetup = true;
 
-    // Press-and-hold (Peek) & Tap-to-toggle logic for password eye button
-    let isEyePointerDown = false;
-    let eyePressStartTime = 0;
-    let eyeStateBeforePress = false;
-    let lastEyeReleaseTime = 0;
+      // Mobile styling to prevent text selection and magnifier callout
+      btnEl.style.webkitTouchCallout = 'none';
+      btnEl.style.userSelect = 'none';
+      btnEl.style.touchAction = 'manipulation';
 
-    function handleEyePressStart(e) {
-      if (e.button && e.button !== 0) return;
-      if (e.cancelable) e.preventDefault();
-      isEyePointerDown = true;
-      eyePressStartTime = Date.now();
-      eyeStateBeforePress = (inputPassword && inputPassword.type === 'text');
-      // If currently masked, immediately reveal upon press down!
-      if (!eyeStateBeforePress) {
-        setPasswordVisibility(true);
-      }
-    }
-
-    function handleEyePressEnd(e) {
-      if (!isEyePointerDown) return;
-      isEyePointerDown = false;
-      lastEyeReleaseTime = Date.now();
-      const holdDuration = Date.now() - eyePressStartTime;
-
-      if (holdDuration >= 250) {
-        // Held for 250ms or more -> Peek mode! Revert back upon release
-        setPasswordVisibility(eyeStateBeforePress);
-      } else {
-        // Quick tap (< 250ms) -> Toggle mode!
-        if (eyeStateBeforePress) {
-          setPasswordVisibility(false);
-        } else {
-          setPasswordVisibility(true);
-        }
-      }
-      try { inputPassword && inputPassword.focus(); } catch (err) {}
-    }
-
-    function handleEyePressCancel() {
-      if (!isEyePointerDown) return;
-      isEyePointerDown = false;
-      setPasswordVisibility(eyeStateBeforePress);
-    }
-
-    if (btnTogglePassword && !btnTogglePassword._hasHoldListeners) {
-      btnTogglePassword._hasHoldListeners = true;
-      btnTogglePassword.addEventListener('pointerdown', handleEyePressStart);
-      btnTogglePassword.addEventListener('pointerup', handleEyePressEnd);
-      btnTogglePassword.addEventListener('pointercancel', handleEyePressCancel);
-      btnTogglePassword.addEventListener('pointerleave', handleEyePressCancel);
-
-      // Prevent context menu (long press callout / copy popup on iOS/Android)
-      btnTogglePassword.addEventListener('contextmenu', (e) => {
+      btnEl.addEventListener('contextmenu', (e) => {
         e.preventDefault();
         e.stopPropagation();
         return false;
       });
 
-      // Handle keyboard accessibility (Enter/Space on button) without synthetic click interference
-      btnTogglePassword.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        if (Date.now() - lastEyeReleaseTime > 350) {
-          window.toggleAdminPassword();
-        }
-      });
-
-      // Fallback for browsers without Pointer Events
-      if (!window.PointerEvent) {
-        btnTogglePassword.addEventListener('mousedown', handleEyePressStart);
-        btnTogglePassword.addEventListener('mouseup', handleEyePressEnd);
-        btnTogglePassword.addEventListener('mouseleave', handleEyePressCancel);
-        btnTogglePassword.addEventListener('touchstart', handleEyePressStart, { passive: false });
-        btnTogglePassword.addEventListener('touchend', handleEyePressEnd);
-        btnTogglePassword.addEventListener('touchcancel', handleEyePressCancel);
-      }
-    }
-
-    // Universal Password Eye Toggle Helper (supports click and press-and-hold)
-    function setupPasswordEyeToggle(btnEl, inputEl, openIconEl, closedIconEl) {
-      if (!btnEl || !inputEl || btnEl._hasHoldListeners) return;
-      btnEl._hasHoldListeners = true;
-
-      let isDown = false;
-      let startTime = 0;
-      let wasText = false;
-      let lastRelease = 0;
+      let holdTimer = null;
+      let isHeld = false;
+      let originalType = 'password';
 
       function setVis(show) {
         inputEl.type = show ? 'text' : 'password';
@@ -577,63 +579,64 @@
         if (show) {
           btnEl.classList.add('text-indigo-400');
           btnEl.classList.remove('text-zinc-400');
+          btnEl.setAttribute('title', 'Sembunyikan Password');
         } else {
           btnEl.classList.remove('text-indigo-400');
           btnEl.classList.add('text-zinc-400');
+          btnEl.setAttribute('title', 'Tekan atau tahan untuk melihat password');
         }
       }
 
-      function onDown(e) {
-        if (e.button && e.button !== 0) return;
-        if (e.cancelable) e.preventDefault();
-        isDown = true;
-        startTime = Date.now();
-        wasText = (inputEl.type === 'text');
-        if (!wasText) setVis(true);
-      }
-
-      function onUp(e) {
-        if (!isDown) return;
-        isDown = false;
-        lastRelease = Date.now();
-        if (Date.now() - startTime >= 250) {
-          setVis(wasText);
-        } else {
-          setVis(!wasText);
-        }
-        try { inputEl.focus(); } catch (err) {}
-      }
-
-      function onCancel() {
-        if (!isDown) return;
-        isDown = false;
-        setVis(wasText);
-      }
-
-      btnEl.addEventListener('pointerdown', onDown);
-      btnEl.addEventListener('pointerup', onUp);
-      btnEl.addEventListener('pointercancel', onCancel);
-      btnEl.addEventListener('pointerleave', onCancel);
-      btnEl.addEventListener('contextmenu', (e) => { e.preventDefault(); e.stopPropagation(); return false; });
+      // Tap / Click mode: directly toggle
       btnEl.addEventListener('click', (e) => {
         e.preventDefault();
         e.stopPropagation();
-        if (Date.now() - lastRelease > 350) {
-          setVis(inputEl.type === 'password');
+        if (isHeld) {
+          isHeld = false;
+          return;
         }
+        const nextShow = inputEl.type === 'password';
+        setVis(nextShow);
+        try { inputEl.focus(); } catch (err) {}
       });
 
-      if (!window.PointerEvent) {
-        btnEl.addEventListener('mousedown', onDown);
-        btnEl.addEventListener('mouseup', onUp);
-        btnEl.addEventListener('mouseleave', onCancel);
-        btnEl.addEventListener('touchstart', onDown, { passive: false });
-        btnEl.addEventListener('touchend', onUp);
-        btnEl.addEventListener('touchcancel', onCancel);
+      // Press and hold (Peek) mode
+      function onStart(e) {
+        if (e.button && e.button !== 0) return;
+        originalType = inputEl.type;
+        clearTimeout(holdTimer);
+        holdTimer = setTimeout(() => {
+          isHeld = true;
+          setVis(true);
+        }, 220);
       }
+
+      function onEnd() {
+        clearTimeout(holdTimer);
+        if (isHeld) {
+          setVis(originalType === 'text');
+          setTimeout(() => { isHeld = false; }, 120);
+        }
+      }
+
+      // Touch events for mobile (iOS Safari, Android Chrome, Mobile Firefox)
+      btnEl.addEventListener('touchstart', onStart, { passive: true });
+      btnEl.addEventListener('touchend', onEnd);
+      btnEl.addEventListener('touchcancel', onEnd);
+
+      // Mouse events for desktop browsers
+      btnEl.addEventListener('mousedown', onStart);
+      btnEl.addEventListener('mouseup', onEnd);
+      btnEl.addEventListener('mouseleave', onEnd);
     }
 
-    // Connect eye toggles for all modals & forms
+    // Connect eye toggles for all password inputs
+    setupPasswordEyeToggle(
+      btnTogglePassword,
+      inputPassword,
+      document.getElementById('eyeIconOpen'),
+      document.getElementById('eyeIconClosed')
+    );
     setupPasswordEyeToggle(
       document.getElementById('btnToggleNewAdminPass'),
       document.getElementById('newAdminPass'),
@@ -1723,82 +1726,8 @@
   }
 
   function renderAdminAccountsList() {
-    const listEl = document.getElementById('adminAccountsList');
-    if (!listEl) return;
-    const accounts = getAdminAccounts();
-    const canDelete = accounts.length > 1;
-    const currentDev = window.DeviceFingerprint ? window.DeviceFingerprint.getDeviceInfo() : { deviceId: 'dev_local', deviceInfo: 'Perangkat Ini' };
-
-    listEl.innerHTML = accounts.map(acc => {
-      const isOwner = acc.username.toLowerCase() === 'admin1118';
-      let statusBadge = '';
-      if (acc.isOnline) {
-        if (acc.activeDeviceId === currentDev.deviceId) {
-          statusBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">Online • ${escapeHtml(acc.deviceInfo || 'Perangkat Ini')} (Perangkat Ini)</span>`;
-        } else {
-          statusBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-500/15 text-amber-400 border border-amber-500/30">Online • ${escapeHtml(acc.deviceInfo || 'Perangkat Lain')}</span>`;
-        }
-      } else {
-        statusBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-zinc-800 text-zinc-400 border border-zinc-700">Offline</span>`;
-      }
-
-      return `
-        <div class="p-2.5 rounded-xl bg-zinc-900/80 border border-zinc-800 flex flex-wrap items-center justify-between gap-2 text-xs">
-          <div class="flex items-center gap-2">
-            <span class="w-2 h-2 rounded-full ${acc.isOnline ? 'bg-emerald-400 animate-pulse' : 'bg-zinc-600'}"></span>
-            <div>
-              <div class="font-bold text-white font-mono flex items-center gap-2">
-                <span>${escapeHtml(acc.username)}</span>
-                <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded ${isOwner ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30' : 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20'}">${isOwner ? 'Owner' : (acc.role || 'Admin')}</span>
-              </div>
-              <div class="mt-0.5">${statusBadge}</div>
-            </div>
-          </div>
-          <div class="flex items-center gap-1.5">
-            ${isOwner ? '' : (canDelete ? `
-              <button type="button" data-del-user="${escapeHtml(acc.username)}"
-                class="btn-delete-admin px-2.5 py-1 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 text-[11px] font-bold transition flex items-center gap-1 cursor-pointer active:scale-95">
-                <i data-lucide="trash-2" class="w-3 h-3"></i>
-                <span>Hapus</span>
-              </button>
-            ` : '')}
-          </div>
-        </div>
-      `;
-    }).join('');
-
-    listEl.querySelectorAll('.btn-delete-admin').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const u = btn.getAttribute('data-del-user');
-        if (!u) return;
-
-        // Protection: Admin1118 cannot be deleted
-        if (u.toLowerCase() === 'admin1118') {
-          alert('Akun Owner (Admin1118) adalah akun utama sistem dan tidak dapat dihapus.');
-          return;
-        }
-
-        const current = getAdminAccounts();
-        if (current.length <= 1) {
-          alert('Tidak dapat menghapus akun admin terakhir. Minimal harus ada 1 akun admin aktif di sistem.');
-          return;
-        }
-
-        pendingDeleteUsername = u;
-        const modal = document.getElementById('modalConfirmDeleteAdmin');
-        const userText = document.getElementById('confirmDeleteAdminUserText');
-        const passInput = document.getElementById('inputDeleteAdminPass');
-        const errText = document.getElementById('deleteAdminError');
-        if (userText) userText.textContent = u;
-        if (passInput) passInput.value = '';
-        if (errText) errText.classList.add('hidden');
-        if (modal) modal.classList.remove('hidden');
-        if (passInput) passInput.focus();
-        lucide.createIcons();
-      });
-    });
-
-    lucide.createIcons();
+    // Merged into unified renderSwitchAdminList
+    renderSwitchAdminList();
   }
 
   function initAdminAccountManagement() {
@@ -1838,10 +1767,12 @@
     }
   }
 
+  // Unified Admin Accounts Grid (Status Online, Info Perangkat, Ganti Akun & Hapus Akun)
   function renderSwitchAdminList() {
     const listEl = document.getElementById('switchAdminList');
     const badgeEl = document.getElementById('currentAdminBadge');
     const accounts = getAdminAccounts();
+    const canDelete = accounts.length > 1;
     const currentDev = window.DeviceFingerprint ? window.DeviceFingerprint.getDeviceInfo() : { deviceId: 'dev_local', deviceInfo: 'Perangkat Ini' };
     let activeUsername = sessionStorage.getItem('sqr_admin_username');
 
@@ -1866,68 +1797,99 @@
     if (!listEl) return;
 
     listEl.innerHTML = accounts.map(acc => {
+      const isOwner = acc.username.trim().toLowerCase() === 'admin1118';
       const isCurrentActive = acc.username.trim().toLowerCase() === activeUsername.trim().toLowerCase();
       const isOnlineOtherDevice = acc.isOnline && acc.activeDeviceId && acc.activeDeviceId !== currentDev.deviceId;
+      const isOnlineThisDevice = acc.isOnline && acc.activeDeviceId === currentDev.deviceId;
 
+      // Status indicator and badge
+      let statusBadge = '';
+      let statusDot = '';
+      if (isOnlineThisDevice) {
+        statusDot = 'bg-emerald-400 animate-pulse';
+        statusBadge = `<span class="text-[10px] font-bold text-emerald-400 bg-emerald-500/15 px-2 py-0.5 rounded border border-emerald-500/30">Online (Perangkat Ini)</span>`;
+      } else if (isOnlineOtherDevice) {
+        statusDot = 'bg-amber-400';
+        statusBadge = `<span class="text-[10px] font-bold text-amber-400 bg-amber-500/15 px-2 py-0.5 rounded border border-amber-500/30">Online di Perangkat Lain</span>`;
+      } else {
+        statusDot = 'bg-zinc-600';
+        statusBadge = `<span class="text-[10px] font-medium text-zinc-400 bg-zinc-800 px-2 py-0.5 rounded border border-zinc-700">Offline</span>`;
+      }
+
+      // Action button at bottom of card
+      let actionButton = '';
       if (isCurrentActive) {
-        return `
-          <div class="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 space-y-2 relative">
-            <div class="flex items-center justify-between">
+        actionButton = `
+          <button type="button" disabled
+            class="w-full py-2 rounded-lg bg-emerald-500/20 text-emerald-300 font-bold text-xs flex items-center justify-center gap-1.5 cursor-default border border-emerald-500/30">
+            <i data-lucide="check-circle-2" class="w-3.5 h-3.5 text-emerald-400"></i>
+            <span>Sedang Digunakan</span>
+          </button>
+        `;
+      } else if (isOnlineOtherDevice) {
+        actionButton = `
+          <button type="button" disabled
+            class="w-full py-2 rounded-lg bg-zinc-800/80 text-zinc-500 text-xs font-semibold cursor-not-allowed flex items-center justify-center gap-1.5 border border-zinc-700/50">
+            <i data-lucide="lock" class="w-3.5 h-3.5 text-zinc-500"></i>
+            <span>Dipakai di Perangkat Lain</span>
+          </button>
+        `;
+      } else {
+        actionButton = `
+          <button type="button" data-switch-user="${escapeHtml(acc.username)}"
+            class="btn-switch-admin w-full py-2 rounded-lg bg-gradient-to-r from-indigo-500 to-blue-600 hover:from-indigo-400 hover:to-blue-500 text-white text-xs font-bold transition shadow cursor-pointer active:scale-98 flex items-center justify-center gap-1.5">
+            <i data-lucide="repeat" class="w-3.5 h-3.5"></i>
+            <span>Beralih ke Akun Ini</span>
+          </button>
+        `;
+      }
+
+      // Delete action button (top right of card, protected for Owner and if only 1 admin)
+      let deleteBtnHtml = '';
+      if (!isOwner && canDelete) {
+        deleteBtnHtml = `
+          <button type="button" data-del-user="${escapeHtml(acc.username)}"
+            class="btn-delete-admin p-1 rounded-lg text-zinc-500 hover:text-rose-400 hover:bg-rose-500/10 transition cursor-pointer"
+            title="Hapus Akun ${escapeHtml(acc.username)}">
+            <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+          </button>
+        `;
+      }
+
+      return `
+        <div class="p-3.5 rounded-xl ${isCurrentActive ? 'bg-emerald-500/5 border-emerald-500/30' : (isOnlineOtherDevice ? 'bg-amber-500/5 border-amber-500/20' : 'bg-zinc-900/90 border-zinc-800')} border space-y-3 relative transition hover:border-zinc-700">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <span class="w-2 h-2 rounded-full ${statusDot}"></span>
               <span class="font-bold text-white text-xs font-mono">${escapeHtml(acc.username)}</span>
-              <span class="text-[10px] font-bold text-emerald-400 bg-emerald-500/20 px-2 py-0.5 rounded border border-emerald-500/30">Aktif Saat Ini</span>
+              <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded ${isOwner ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30' : 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20'}">
+                ${isOwner ? 'Owner' : (acc.role || 'Admin')}
+              </span>
             </div>
-            <div class="text-[11px] text-zinc-400 flex items-center gap-1.5">
-              <i data-lucide="laptop" class="w-3.5 h-3.5 text-emerald-400"></i>
-              <span class="truncate">${escapeHtml(acc.deviceInfo || 'Perangkat Ini')}</span>
+            ${deleteBtnHtml}
+          </div>
+
+          <div class="space-y-1.5 text-[11px] text-zinc-400">
+            <div class="flex items-center justify-between">
+              <span class="text-zinc-500">Status:</span>
+              ${statusBadge}
             </div>
-            <div class="pt-1">
-              <span class="block w-full py-1.5 text-center rounded-lg bg-emerald-500/20 text-emerald-300 font-semibold text-[11px]">
-                Sedang Digunakan
+            <div class="flex items-center justify-between truncate">
+              <span class="text-zinc-500">Perangkat:</span>
+              <span class="text-zinc-300 truncate font-mono text-[10px] max-w-[150px] text-right" title="${escapeHtml(acc.deviceInfo || 'Tidak tercatat')}">
+                ${acc.isOnline ? escapeHtml(acc.deviceInfo || 'Perangkat Ini') : '-'}
               </span>
             </div>
           </div>
-        `;
-      } else if (isOnlineOtherDevice) {
-        return `
-          <div class="p-3.5 rounded-xl bg-rose-500/5 border border-rose-500/20 space-y-2 opacity-80">
-            <div class="flex items-center justify-between">
-              <span class="font-bold text-white text-xs font-mono">${escapeHtml(acc.username)}</span>
-              <span class="text-[10px] font-bold text-rose-400 bg-rose-500/20 px-2 py-0.5 rounded border border-rose-500/30">Dipakai di Perangkat Lain</span>
-            </div>
-            <div class="text-[11px] text-zinc-400 flex items-center gap-1.5">
-              <i data-lucide="shield-alert" class="w-3.5 h-3.5 text-rose-400"></i>
-              <span class="truncate">${escapeHtml(acc.deviceInfo || 'Perangkat Lain')}</span>
-            </div>
-            <div class="pt-1">
-              <button type="button" disabled
-                class="w-full py-1.5 rounded-lg bg-zinc-800 text-zinc-500 text-[11px] font-semibold cursor-not-allowed">
-                Tidak Dapat Dipilih
-              </button>
-            </div>
+
+          <div class="pt-1">
+            ${actionButton}
           </div>
-        `;
-      } else {
-        return `
-          <div class="p-3.5 rounded-xl bg-zinc-900/90 border border-zinc-800 hover:border-indigo-500/50 transition space-y-2">
-            <div class="flex items-center justify-between">
-              <span class="font-bold text-white text-xs font-mono">${escapeHtml(acc.username)}</span>
-              <span class="text-[10px] font-medium text-zinc-400 bg-zinc-800 px-2 py-0.5 rounded border border-zinc-700">Tersedia</span>
-            </div>
-            <div class="text-[11px] text-zinc-400 flex items-center gap-1.5">
-              <i data-lucide="user-check" class="w-3.5 h-3.5 text-indigo-400"></i>
-              <span>${acc.role || 'Admin'}</span>
-            </div>
-            <div class="pt-1">
-              <button type="button" data-switch-user="${escapeHtml(acc.username)}"
-                class="btn-switch-admin w-full py-1.5 rounded-lg bg-gradient-to-r from-indigo-500 to-blue-600 hover:from-indigo-400 hover:to-blue-500 text-white text-[11px] font-bold transition shadow cursor-pointer active:scale-98">
-                Beralih ke Akun Ini
-              </button>
-            </div>
-          </div>
-        `;
-      }
+        </div>
+      `;
     }).join('');
 
+    // Connect switch buttons
     listEl.querySelectorAll('.btn-switch-admin').forEach(btn => {
       btn.addEventListener('click', () => {
         const u = btn.getAttribute('data-switch-user');
@@ -1937,6 +1899,37 @@
         const userText = document.getElementById('confirmSwitchAdminUserText');
         const passInput = document.getElementById('inputSwitchAdminPass');
         const errText = document.getElementById('switchAdminError');
+        if (userText) userText.textContent = u;
+        if (passInput) passInput.value = '';
+        if (errText) errText.classList.add('hidden');
+        if (modal) modal.classList.remove('hidden');
+        if (passInput) passInput.focus();
+        lucide.createIcons();
+      });
+    });
+
+    // Connect delete buttons
+    listEl.querySelectorAll('.btn-delete-admin').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const u = btn.getAttribute('data-del-user');
+        if (!u) return;
+
+        if (u.toLowerCase() === 'admin1118') {
+          alert('Akun Owner (Admin1118) adalah akun utama sistem dan tidak dapat dihapus.');
+          return;
+        }
+
+        const current = getAdminAccounts();
+        if (current.length <= 1) {
+          alert('Tidak dapat menghapus akun admin terakhir. Minimal harus ada 1 akun admin aktif di sistem.');
+          return;
+        }
+
+        pendingDeleteUsername = u;
+        const modal = document.getElementById('modalConfirmDeleteAdmin');
+        const userText = document.getElementById('confirmDeleteAdminUserText');
+        const passInput = document.getElementById('inputDeleteAdminPass');
+        const errText = document.getElementById('deleteAdminError');
         if (userText) userText.textContent = u;
         if (passInput) passInput.value = '';
         if (errText) errText.classList.add('hidden');
@@ -2012,6 +2005,8 @@
             document.documentElement.requestFullscreen().catch(() => {});
           } else if (document.documentElement.webkitRequestFullscreen) {
             document.documentElement.webkitRequestFullscreen();
+          } else {
+            showToast('Layar Penuh iOS', 'Browser Safari pada iPhone tidak mendukung Fullscreen API secara native. Gunakan menu Share -> "Tambah ke Layar Utama" pada iPhone untuk mode layar penuh.');
           }
         } else {
           if (document.exitFullscreen) {
@@ -2350,11 +2345,13 @@
       });
     }
 
-    document.addEventListener('click', (e) => {
+    const handleOutsideTap = (e) => {
       if (!e.target.closest('.filter-dropdown-group')) {
         closeAllMenus();
       }
-    });
+    };
+    document.addEventListener('click', handleOutsideTap);
+    document.addEventListener('touchend', handleOutsideTap, { passive: true });
 
     configs.forEach(cfg => {
       const btn = document.getElementById(cfg.btnId);
