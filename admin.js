@@ -213,6 +213,31 @@
     } catch (e) {}
   }
 
+  // Audio Error Buzzer (Untuk Peringatan QR Salah Tipe & Validasi Gagal)
+  function playErrorBuzzer() {
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      if (ctx.state === 'suspended') ctx.resume();
+
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(220, ctx.currentTime);
+      osc.frequency.setValueAtTime(160, ctx.currentTime + 0.12);
+
+      gain.gain.setValueAtTime(0.01, ctx.currentTime);
+      gain.gain.linearRampToValueAtTime(0.25, ctx.currentTime + 0.03);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.35);
+    } catch (e) {}
+  }
+
   // --- LOGOUT CONTROLLER ---
   function handleAdminLogout() {
     if (confirm('Keluar dari sesi admin (Log Out)?')) {
@@ -882,8 +907,8 @@
       if (!token || !token.startsWith('QR-')) return null;
 
       if (!type) {
-        if (token.includes('-OUT-')) type = 'KELUAR';
-        else if (token.includes('-IN-')) type = 'MASUK';
+        if (token.includes('-OUT-') || token.startsWith('QR-OUT-') || token.includes('OUT')) type = 'KELUAR';
+        else if (token.includes('-IN-') || token.startsWith('QR-IN-') || token.includes('IN')) type = 'MASUK';
       }
 
       return { 
@@ -943,6 +968,48 @@
       const qrData = extractQrData(decodedText);
       if (!qrData) return;
 
+      // REQUIREMENT: Validasi Kesesuaian Tipe QR (Masuk vs Keluar) Seketika (Task 9)
+      const scannedType = qrData.type ? qrData.type.toUpperCase() : null;
+      if (scannedType && currentAttendanceType && scannedType !== currentAttendanceType) {
+        // Mainkan nada buzzer peringatan dan segera hentikan scanner
+        playErrorBuzzer();
+        stopInAppCameraScanner();
+        cameraScanModal.classList.add('hidden');
+
+        const modalWrongQrType = document.getElementById('modalWrongQrType');
+        const wrongQrExpectedType = document.getElementById('wrongQrExpectedType');
+        const wrongQrScannedType = document.getElementById('wrongQrScannedType');
+        const wrongQrTypeMessage = document.getElementById('wrongQrTypeMessage');
+
+        const expectedText = currentAttendanceType === 'MASUK' ? 'ABSENSI MASUK' : 'ABSENSI KELUAR';
+        const scannedText = scannedType === 'MASUK' ? 'ABSENSI MASUK' : 'ABSENSI KELUAR';
+
+        if (wrongQrExpectedType) {
+          wrongQrExpectedType.textContent = expectedText;
+          wrongQrExpectedType.className = currentAttendanceType === 'MASUK' ? 'font-bold text-emerald-400' : 'font-bold text-rose-400';
+        }
+        if (wrongQrScannedType) {
+          wrongQrScannedType.textContent = scannedText;
+          wrongQrScannedType.className = scannedType === 'MASUK' ? 'font-bold text-emerald-400' : 'font-bold text-rose-400';
+        }
+        if (wrongQrTypeMessage) {
+          if (currentAttendanceType === 'MASUK' && scannedType === 'KELUAR') {
+            wrongQrTypeMessage.textContent = 'Anda sedang berada di sesi Absensi Masuk, namun QR Code yang Anda scan adalah QR Absensi Keluar. Silakan scan QR Absensi Masuk yang berwarna hijau di layar admin!';
+          } else if (currentAttendanceType === 'KELUAR' && scannedType === 'MASUK') {
+            wrongQrTypeMessage.textContent = 'Anda sedang berada di sesi Absensi Keluar, namun QR Code yang Anda scan adalah QR Absensi Masuk. Silakan scan QR Absensi Keluar yang berwarna merah/rose di layar admin!';
+          } else {
+            wrongQrTypeMessage.textContent = `Anda sedang berada di menu ${expectedText}, namun QR Code yang Anda scan adalah ${scannedText}.`;
+          }
+        }
+
+        if (modalWrongQrType) {
+          modalWrongQrType.classList.remove('hidden');
+          lucide.createIcons();
+        }
+        return;
+      }
+
+      // Tipe QR sesuai: Lanjutkan dengan feedback sukses
       isStabilizing = true;
       playSuccessChime();
 
@@ -961,36 +1028,6 @@
 
       stopInAppCameraScanner();
       cameraScanModal.classList.add('hidden');
-
-      // Requirement: Check for QR type mismatch (Task 9)
-      const scannedType = qrData.type ? qrData.type.toUpperCase() : null;
-      if (scannedType && currentAttendanceType && scannedType !== currentAttendanceType) {
-        const modalWrongQrType = document.getElementById('modalWrongQrType');
-        const wrongQrExpectedType = document.getElementById('wrongQrExpectedType');
-        const wrongQrScannedType = document.getElementById('wrongQrScannedType');
-        const wrongQrTypeMessage = document.getElementById('wrongQrTypeMessage');
-
-        const expectedText = currentAttendanceType === 'MASUK' ? 'ABSENSI MASUK' : 'ABSENSI KELUAR';
-        const scannedText = scannedType === 'MASUK' ? 'ABSENSI MASUK' : 'ABSENSI KELUAR';
-
-        if (wrongQrExpectedType) {
-          wrongQrExpectedType.textContent = expectedText;
-          wrongQrExpectedType.className = currentAttendanceType === 'MASUK' ? 'font-bold text-emerald-400' : 'font-bold text-rose-400';
-        }
-        if (wrongQrScannedType) {
-          wrongQrScannedType.textContent = scannedText;
-          wrongQrScannedType.className = scannedType === 'MASUK' ? 'font-bold text-emerald-400' : 'font-bold text-rose-400';
-        }
-        if (wrongQrTypeMessage) {
-          wrongQrTypeMessage.textContent = `Anda sedang berada di menu ${expectedText}, namun QR Code yang Anda scan adalah ${scannedText}.`;
-        }
-
-        if (modalWrongQrType) {
-          modalWrongQrType.classList.remove('hidden');
-          lucide.createIcons();
-        }
-        return;
-      }
 
       activeScannedToken = qrData.token;
       activeScannedSession = qrData.session;

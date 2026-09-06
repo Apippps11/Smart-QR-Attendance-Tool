@@ -115,9 +115,39 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   if (expectedTypeParam && tokenType && expectedTypeParam !== tokenType) {
     checkingSection.classList.add('hidden');
-    errorSection.classList.remove('hidden');
-    errorTitle.textContent = 'QR Code Tidak Sesuai';
-    errorMessage.textContent = `Anda sedang membuka absensi ${expectedTypeParam === 'MASUK' ? 'Masuk' : 'Keluar'}, namun QR Code yang discan adalah untuk Absensi ${tokenType === 'MASUK' ? 'Masuk' : 'Keluar'}.`;
+    const modalWrongQrType = document.getElementById('modalWrongQrType');
+    const wrongQrExpectedType = document.getElementById('wrongQrExpectedType');
+    const wrongQrScannedType = document.getElementById('wrongQrScannedType');
+    const wrongQrTypeMessage = document.getElementById('wrongQrTypeMessage');
+
+    const expectedText = expectedTypeParam === 'MASUK' ? 'ABSENSI MASUK' : 'ABSENSI KELUAR';
+    const scannedText = tokenType === 'MASUK' ? 'ABSENSI MASUK' : 'ABSENSI KELUAR';
+
+    if (wrongQrExpectedType) {
+      wrongQrExpectedType.textContent = expectedText;
+      wrongQrExpectedType.className = expectedTypeParam === 'MASUK' ? 'font-bold text-emerald-400' : 'font-bold text-rose-400';
+    }
+    if (wrongQrScannedType) {
+      wrongQrScannedType.textContent = scannedText;
+      wrongQrScannedType.className = tokenType === 'MASUK' ? 'font-bold text-emerald-400' : 'font-bold text-rose-400';
+    }
+    if (wrongQrTypeMessage) {
+      if (expectedTypeParam === 'MASUK' && tokenType === 'KELUAR') {
+        wrongQrTypeMessage.textContent = 'Anda sedang berada di menu Absensi Masuk, namun QR Code yang Anda scan adalah QR Absensi Keluar. Silakan scan QR Absensi Masuk (warna hijau)!';
+      } else if (expectedTypeParam === 'KELUAR' && tokenType === 'MASUK') {
+        wrongQrTypeMessage.textContent = 'Anda sedang berada di menu Absensi Keluar, namun QR Code yang Anda scan adalah QR Absensi Masuk. Silakan scan QR Absensi Keluar (warna merah)!';
+      } else {
+        wrongQrTypeMessage.textContent = `Anda sedang berada di menu ${expectedText}, namun QR Code yang Anda scan adalah ${scannedText}.`;
+      }
+    }
+
+    if (modalWrongQrType) {
+      modalWrongQrType.classList.remove('hidden');
+    } else {
+      errorSection.classList.remove('hidden');
+      errorTitle.textContent = 'QR Code Tidak Sesuai';
+      errorMessage.textContent = `Anda sedang membuka absensi ${expectedText}, namun QR Code yang discan adalah untuk ${scannedText}.`;
+    }
     lucide.createIcons();
     return;
   }

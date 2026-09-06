@@ -395,6 +395,49 @@
     </div>
   </main>
 
+  <!-- ======================================================== -->
+  <!-- MODAL: PERINGATAN QR TIDAK SESUAI (TASK 9)               -->
+  <!-- ======================================================== -->
+  <div id="modalWrongQrType" class="hidden fixed inset-0 z-50 bg-[#090b10]/92 backdrop-blur-md flex items-center justify-center p-4">
+    <div class="pixel-box rounded-2xl p-6 sm:p-7 max-w-sm w-full space-y-4 text-center relative overflow-hidden">
+      <div class="pixel-corner-tl"></div><div class="pixel-corner-tr"></div>
+      <div class="pixel-corner-bl"></div><div class="pixel-corner-br"></div>
+
+      <div class="w-14 h-14 rounded-2xl bg-rose-500/15 border border-rose-500/30 text-rose-400 mx-auto flex items-center justify-center shadow-lg shadow-rose-500/20">
+        <i data-lucide="alert-triangle" class="w-7 h-7"></i>
+      </div>
+
+      <div class="space-y-1.5">
+        <h4 class="text-base font-bold text-white tracking-tight">QR Code Tidak Sesuai!</h4>
+        <p id="wrongQrTypeMessage" class="text-xs text-zinc-300 leading-relaxed">
+          Anda sedang berada di menu Absensi Masuk, namun QR Code yang Anda scan adalah QR Absensi Keluar.
+        </p>
+      </div>
+
+      <div class="p-3 rounded-xl bg-[#161a28] border border-white/10 text-left space-y-1.5 text-xs">
+        <div class="flex justify-between">
+          <span class="text-zinc-400">Menu Aktif:</span>
+          <span id="wrongQrExpectedType" class="font-bold text-emerald-400">ABSENSI MASUK</span>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-zinc-400">QR Terdeteksi:</span>
+          <span id="wrongQrScannedType" class="font-bold text-rose-400">ABSENSI KELUAR</span>
+        </div>
+      </div>
+
+      <div class="flex gap-2.5 pt-1">
+        <button type="button" id="btnReturnWrongQr" onclick="window.location.href='index.html'"
+          class="w-1/2 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 text-xs font-semibold transition cursor-pointer">
+          Kembali ke Menu
+        </button>
+        <button type="button" id="btnRescanWrongQr" onclick="window.location.href='attend.html'"
+          class="w-1/2 py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-blue-600 hover:from-indigo-400 hover:to-blue-500 text-white font-bold text-xs transition shadow cursor-pointer active:scale-98">
+          Scan Ulang
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- Clean Footer -->
   <footer class="border-t border-[#1c2130] bg-[#090a0f] py-3 text-center text-xs text-zinc-500">
     <div class="max-w-md mx-auto px-4 flex items-center justify-center">
