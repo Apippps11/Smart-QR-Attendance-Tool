@@ -1219,83 +1219,106 @@
           </button>
         </div>
 
-        <!-- FILTER BAR TERPADU (TAHUN, BULAN, MINGGU 1-4, TANGGAL, PENCARIAN) -->
-        <div class="bg-[#121624] border border-white/10 rounded-2xl p-4 sm:p-5 space-y-3.5 shadow-xl shadow-black/30">
-          <div class="flex flex-wrap items-center gap-3">
-            
-            <!-- Filter Tahun Dropdown -->
-            <div class="flex items-center gap-2 min-w-[130px]">
-              <span class="text-xs text-zinc-400 font-medium">Tahun:</span>
-              <select id="selectFilterYear" class="w-full px-3 py-2 bg-[#161a28] border border-white/10 rounded-xl text-xs text-zinc-200 focus:outline-none focus:border-indigo-500 font-medium">
-                <option value="ALL">Semua Tahun</option>
-              </select>
-            </div>
-
-            <!-- Filter Bulan Dropdown -->
-            <div class="flex items-center gap-2 min-w-[140px]">
-              <span class="text-xs text-zinc-400 font-medium">Bulan:</span>
-              <select id="selectFilterMonth" class="w-full px-3 py-2 bg-[#161a28] border border-white/10 rounded-xl text-xs text-zinc-200 focus:outline-none focus:border-indigo-500 font-medium">
-                <option value="ALL">Semua Bulan</option>
-                <option value="01">Januari</option>
-                <option value="02">Februari</option>
-                <option value="03">Maret</option>
-                <option value="04">April</option>
-                <option value="05">Mei</option>
-                <option value="06">Juni</option>
-                <option value="07">Juli</option>
-                <option value="08">Agustus</option>
-                <option value="09">September</option>
-                <option value="10">Oktober</option>
-                <option value="11">November</option>
-                <option value="12">Desember</option>
-              </select>
-            </div>
-
-            <!-- Filter Mingguan Dropdown (Total 4 Minggu) -->
-            <div class="flex items-center gap-2 min-w-[160px]">
-              <span class="text-xs text-zinc-400 font-medium">Minggu:</span>
-              <select id="selectFilterWeek" class="w-full px-3 py-2 bg-[#161a28] border border-white/10 rounded-xl text-xs text-zinc-200 focus:outline-none focus:border-indigo-500 font-medium">
-                <option value="ALL">Semua Minggu</option>
-                <option value="W1">Minggu 1 (Tgl 01 - 07)</option>
-                <option value="W2">Minggu 2 (Tgl 08 - 14)</option>
-                <option value="W3">Minggu 3 (Tgl 15 - 21)</option>
-                <option value="W4">Minggu 4 (Tgl 22 - Akhir)</option>
-              </select>
-            </div>
-
-            <!-- Filter Tanggal Dropdown (Full Tulisan) -->
-            <div class="flex items-center gap-2 min-w-[130px]">
-              <span class="text-xs text-zinc-400 font-medium">Tanggal:</span>
-              <select id="selectFilterDay" class="w-full px-3 py-2 bg-[#161a28] border border-white/10 rounded-xl text-xs text-zinc-200 focus:outline-none focus:border-indigo-500 font-medium">
-                <option value="ALL">Semua Tanggal</option>
-              </select>
-            </div>
-
+        <!-- FILTER BAR TERPADU VERTIKAL (PENCARIAN, TAHUN, BULAN, MINGGU, TANGGAL) -->
+        <div class="bg-[#121624] border border-white/10 rounded-2xl p-4 sm:p-5 space-y-4 shadow-xl shadow-black/30">
+          
+          <!-- Top Bar: Pencarian & Aksi Cepat -->
+          <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-white/[0.08]">
             <!-- Search Input -->
-            <div class="relative flex-1 min-w-[200px]">
+            <div class="relative flex-1 min-w-[220px]">
               <span class="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-zinc-500">
                 <i data-lucide="search" class="w-4 h-4"></i>
               </span>
               <input type="text" id="filterSearch" placeholder="Cari nama, token, perangkat..."
-                class="w-full pl-9 pr-3.5 py-2 bg-[#161a28] border border-white/10 rounded-xl text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-indigo-500 font-medium">
+                class="w-full pl-9 pr-3.5 py-2.5 bg-[#161a28] border border-white/10 rounded-xl text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-indigo-500 font-medium">
             </div>
 
             <!-- Action Buttons: Reset, Export CSV, Reset Data -->
             <div class="flex items-center gap-2 shrink-0">
-              <button id="btnResetFilter" title="Reset Semua Filter" class="p-2.5 bg-[#161a28] hover:bg-[#1e2438] text-zinc-400 hover:text-white border border-white/10 rounded-xl transition shadow-sm active:scale-95 cursor-pointer">
-                <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+              <button id="btnResetFilter" title="Reset Semua Filter" class="px-3 py-2.5 bg-[#161a28] hover:bg-[#1e2438] text-zinc-300 hover:text-white border border-white/10 rounded-xl transition shadow-sm active:scale-95 cursor-pointer flex items-center gap-1.5 text-xs font-semibold">
+                <i data-lucide="rotate-ccw" class="w-3.5 h-3.5 text-zinc-400"></i>
+                <span>Reset Filter</span>
               </button>
-              <button id="btnExportCsv" class="px-3.5 py-2 bg-gradient-to-r from-zinc-100 to-white hover:from-white hover:to-zinc-200 text-zinc-950 text-xs font-extrabold rounded-xl transition flex items-center gap-1.5 shadow-md active:scale-95 cursor-pointer">
+              <button id="btnExportCsv" class="px-3.5 py-2.5 bg-gradient-to-r from-zinc-100 to-white hover:from-white hover:to-zinc-200 text-zinc-950 text-xs font-extrabold rounded-xl transition flex items-center gap-1.5 shadow-md active:scale-95 cursor-pointer">
                 <i data-lucide="download" class="w-3.5 h-3.5"></i>
-                <span class="hidden sm:inline">Export CSV</span>
+                <span>Export CSV</span>
               </button>
-              <button id="btnResetData" class="px-3 py-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 text-xs font-bold rounded-xl transition flex items-center gap-1.5 active:scale-95 cursor-pointer">
+              <button id="btnResetData" class="px-3 py-2.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 text-xs font-bold rounded-xl transition flex items-center gap-1.5 active:scale-95 cursor-pointer">
                 <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
-                <span class="hidden sm:inline">Reset</span>
+                <span>Reset</span>
               </button>
+            </div>
+          </div>
+
+          <!-- DERETAN ROW FILTER SEARAH VERTIKAL KE BAWAH -->
+          <div class="space-y-4">
+
+            <!-- 1. Row Tahun (Vertikal) -->
+            <div class="space-y-1.5">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-zinc-300 flex items-center gap-1.5">
+                  <i data-lucide="calendar-range" class="w-3.5 h-3.5 text-indigo-400"></i>
+                  <span>Pilih Tahun:</span>
+                </span>
+                <span id="badgeActiveYear" class="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-md bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
+                  Aktif: Semua Tahun
+                </span>
+              </div>
+              <div id="filterButtonsYear" class="flex flex-wrap gap-2">
+                <!-- Dynamically injected in admin.js -->
+              </div>
+            </div>
+
+            <!-- 2. Row Bulan (Vertikal - Maksimal 6 per baris -> Pas 2 baris untuk 12 opsi) -->
+            <div class="space-y-1.5 pt-1 border-t border-white/[0.05]">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-zinc-300 flex items-center gap-1.5">
+                  <i data-lucide="calendar" class="w-3.5 h-3.5 text-blue-400"></i>
+                  <span>Pilih Bulan:</span>
+                </span>
+                <span id="badgeActiveMonth" class="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-md bg-blue-500/10 text-blue-300 border border-blue-500/20">
+                  Aktif: Semua Bulan
+                </span>
+              </div>
+              <div id="filterButtonsMonth" class="grid grid-cols-3 sm:grid-cols-6 gap-2">
+                <!-- Dynamically injected in admin.js: exactly 6 per row -> 2 rows -->
+              </div>
+            </div>
+
+            <!-- 3. Row Minggu (Vertikal - 4 Minggu) -->
+            <div class="space-y-1.5 pt-1 border-t border-white/[0.05]">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-zinc-300 flex items-center gap-1.5">
+                  <i data-lucide="calendar-days" class="w-3.5 h-3.5 text-emerald-400"></i>
+                  <span>Pilih Minggu:</span>
+                </span>
+                <span id="badgeActiveWeek" class="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">
+                  Aktif: Semua Minggu
+                </span>
+              </div>
+              <div id="filterButtonsWeek" class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <!-- Dynamically injected in admin.js -->
+              </div>
+            </div>
+
+            <!-- 4. Row Tanggal (Vertikal - Bagi per 6 mendatar seperti kalender) -->
+            <div class="space-y-1.5 pt-1 border-t border-white/[0.05]">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-bold text-zinc-300 flex items-center gap-1.5">
+                  <i data-lucide="hash" class="w-3.5 h-3.5 text-amber-400"></i>
+                  <span>Pilih Tanggal:</span>
+                </span>
+                <span id="badgeActiveDay" class="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-300 border border-amber-500/20">
+                  Aktif: Semua Tanggal
+                </span>
+              </div>
+              <div id="filterButtonsDay" class="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
+                <!-- Dynamically injected in admin.js: rows of 6 in horizontal calendar order -->
+              </div>
             </div>
 
           </div>
+
         </div>
 
         <!-- Table View with Dynamic Header -->

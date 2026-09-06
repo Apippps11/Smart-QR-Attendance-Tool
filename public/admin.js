@@ -109,6 +109,10 @@
   let currentAttendanceType = 'MASUK'; // 'MASUK' | 'KELUAR'
   let activeSubTab = 'UTAMA'; // 'UTAMA' | 'MASUK' | 'KELUAR'
   let activePeriodFilter = 'ALL'; // 'ALL' | 'TODAY' | 'WEEK' | 'MONTH'
+  let activeFilterYear = 'ALL';
+  let activeFilterMonth = 'ALL';
+  let activeFilterWeek = 'ALL';
+  let activeFilterDay = 'ALL';
   let mqttClient = null;
   let html5QrScanner = null;
   let activeScannedToken = null;
@@ -1109,7 +1113,7 @@
     playSuccessChime();
     showToast(`Presensi ${attendType === 'KELUAR' ? 'Keluar' : 'Masuk'} Berhasil`, `${name} telah dicatat.`);
     addLiveActivity(record);
-    populateYearFilter();
+    renderYearFilterButtons();
     loadAttendanceData();
 
     return { success: true, attendance: record };
@@ -1127,8 +1131,6 @@
     initClock();
     initCloudMqtt();
     bootAdminQr();
-    populateYearFilter();
-    populateDayFilter();
     loadAttendanceData();
     lucide.createIcons();
   }
@@ -1156,8 +1158,10 @@
     if (viewAttendance) {
       if (viewName === 'attendance') {
         viewAttendance.classList.remove('hidden');
-        populateYearFilter();
-        populateDayFilter();
+        renderYearFilterButtons();
+        renderMonthFilterButtons();
+        renderWeekFilterButtons();
+        renderDayFilterButtons();
         loadAttendanceData();
       } else {
         viewAttendance.classList.add('hidden');
@@ -1172,10 +1176,10 @@
       }
     }
 
-    // 2. Dynamic Header Title (Requirement 1)
+    // 2. Dynamic Header Title
     if (adminHeaderTitle) {
       if (viewName === 'projector') adminHeaderTitle.textContent = 'Administration Dashboard';
-      else if (viewName === 'attendance') adminHeaderTitle.textContent = 'Database Presensi';
+      else if (viewName === 'attendance') adminHeaderTitle.textContent = 'Database';
       else if (viewName === 'settings') adminHeaderTitle.textContent = 'Settings';
     }
 
@@ -1438,41 +1442,218 @@
     }
   }
 
-  // --- FILTER PERIODE WAKTU (TAHUN, BULAN, MINGGUAN 4-WEEKS, HARIAN, SEMUA) ---
+  // --- DYNAMIC VERTICAL BUTTON FILTERS ENGINE ---
+
+  // 1. Render Year Filter Buttons
+  function renderYearFilterButtons() {
+    const container = document.getElementById('filterButtonsYear');
+    const badge = document.getElementById('badgeActiveYear');
+    if (!container) return;
+
+    const attendances = getStoredAttendances();
+    const currentYear = new Date().getFullYear();
+    const yearSet = new Set();
+    yearSet.add(2026);
+    if (currentYear > 2026) yearSet.add(currentYear);
+    attendances.forEach(a => {
+      if (a.date) {
+        const yr = parseInt(a.date.split('-')[0], 10);
+        if (!isNaN(yr) && yr >= 2026) yearSet.add(yr);
+      }
+    });
+    const allYears = Array.from(yearSet).sort((a, b) => a - b);
+
+    // Update Badge
+    if (badge) {
+      badge.textContent = activeFilterYear === 'ALL' ? 'Aktif: Semua Tahun' : `Aktif: Tahun ${activeFilterYear}`;
+    }
+
+    // Build buttons: omit activeFilterYear; if not ALL, put "Semua Tahun" at the very beginning
+    const buttons = [];
+    if (activeFilterYear !== 'ALL') {
+      buttons.push({ val: 'ALL', label: 'Semua Tahun', isReset: true });
+    }
+    allYears.forEach(y => {
+      const yStr = String(y);
+      if (yStr !== activeFilterYear) {
+        buttons.push({ val: yStr, label: `Tahun ${yStr}`, isReset: false });
+      }
+    });
+
+    container.innerHTML = buttons.map(btn => {
+      if (btn.isReset) {
+        return `<button type="button" data-val="${btn.val}" class="btn-filter-year px-3 py-1.5 rounded-lg text-xs font-bold bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-300 border border-indigo-500/30 transition active:scale-95 cursor-pointer flex items-center gap-1.5"><i data-lucide="rotate-ccw" class="w-3 h-3"></i><span>${btn.label}</span></button>`;
+      } else {
+        return `<button type="button" data-val="${btn.val}" class="btn-filter-year px-3 py-1.5 rounded-lg text-xs font-semibold bg-zinc-900/90 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-800 transition active:scale-95 cursor-pointer">${btn.label}</button>`;
+      }
+    }).join('');
+
+    container.querySelectorAll('.btn-filter-year').forEach(b => {
+      b.addEventListener('click', () => {
+        activeFilterYear = b.getAttribute('data-val');
+        renderYearFilterButtons();
+        renderMonthFilterButtons();
+        loadAttendanceData();
+      });
+    });
+    lucide.createIcons();
+  }
+
+  // 2. Render Month Filter Buttons (Max 6 per row -> exactly 2 rows for 12 items)
+  function renderMonthFilterButtons() {
+    const container = document.getElementById('filterButtonsMonth');
+    const badge = document.getElementById('badgeActiveMonth');
+    if (!container) return;
+
+    const allMonths = [
+      { val: '01', name: 'Januari' },
+      { val: '02', name: 'Februari' },
+      { val: '03', name: 'Maret' },
+      { val: '04', name: 'April' },
+      { val: '05', name: 'Mei' },
+      { val: '06', name: 'Juni' },
+      { val: '07', name: 'Juli' },
+      { val: '08', name: 'Agustus' },
+      { val: '09', name: 'September' },
+      { val: '10', name: 'Oktober' },
+      { val: '11', name: 'November' },
+      { val: '12', name: 'Desember' }
+    ];
+
+    // Constrain if year 2026 selected: starting August
+    const monthList = (activeFilterYear === '2026')
+      ? allMonths.filter(m => parseInt(m.val, 10) >= 8)
+      : allMonths;
+
+    const activeObj = allMonths.find(m => m.val === activeFilterMonth);
+    if (badge) {
+      badge.textContent = activeFilterMonth === 'ALL' ? 'Aktif: Semua Bulan' : `Aktif: ${activeObj ? activeObj.name : activeFilterMonth}`;
+    }
+
+    // Build buttons: omit activeFilterMonth; if not ALL, put "Semua Bulan" at the very beginning
+    const buttons = [];
+    if (activeFilterMonth !== 'ALL') {
+      buttons.push({ val: 'ALL', label: 'Semua Bulan', isReset: true });
+    }
+    monthList.forEach(m => {
+      if (m.val !== activeFilterMonth) {
+        buttons.push({ val: m.val, label: m.name, isReset: false });
+      }
+    });
+
+    container.innerHTML = buttons.map(btn => {
+      if (btn.isReset) {
+        return `<button type="button" data-val="${btn.val}" class="btn-filter-month px-2.5 py-1.5 rounded-lg text-xs font-bold bg-blue-500/15 hover:bg-blue-500/25 text-blue-300 border border-blue-500/30 transition active:scale-95 cursor-pointer text-center truncate flex items-center justify-center gap-1"><i data-lucide="rotate-ccw" class="w-3 h-3 shrink-0"></i><span class="truncate">${btn.label}</span></button>`;
+      } else {
+        return `<button type="button" data-val="${btn.val}" class="btn-filter-month px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-zinc-900/90 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-800 transition active:scale-95 cursor-pointer text-center truncate">${btn.label}</button>`;
+      }
+    }).join('');
+
+    container.querySelectorAll('.btn-filter-month').forEach(b => {
+      b.addEventListener('click', () => {
+        activeFilterMonth = b.getAttribute('data-val');
+        renderMonthFilterButtons();
+        loadAttendanceData();
+      });
+    });
+    lucide.createIcons();
+  }
+
+  // 3. Render Week Filter Buttons (4 Minggu)
+  function renderWeekFilterButtons() {
+    const container = document.getElementById('filterButtonsWeek');
+    const badge = document.getElementById('badgeActiveWeek');
+    if (!container) return;
+
+    const allWeeks = [
+      { val: 'W1', name: 'Minggu 1 (Tgl 01 - 07)' },
+      { val: 'W2', name: 'Minggu 2 (Tgl 08 - 14)' },
+      { val: 'W3', name: 'Minggu 3 (Tgl 15 - 21)' },
+      { val: 'W4', name: 'Minggu 4 (Tgl 22 - Akhir)' }
+    ];
+
+    const activeObj = allWeeks.find(w => w.val === activeFilterWeek);
+    if (badge) {
+      badge.textContent = activeFilterWeek === 'ALL' ? 'Aktif: Semua Minggu' : `Aktif: ${activeObj ? activeObj.name : activeFilterWeek}`;
+    }
+
+    const buttons = [];
+    if (activeFilterWeek !== 'ALL') {
+      buttons.push({ val: 'ALL', label: 'Semua Minggu', isReset: true });
+    }
+    allWeeks.forEach(w => {
+      if (w.val !== activeFilterWeek) {
+        buttons.push({ val: w.val, label: w.name, isReset: false });
+      }
+    });
+
+    container.innerHTML = buttons.map(btn => {
+      if (btn.isReset) {
+        return `<button type="button" data-val="${btn.val}" class="btn-filter-week px-2.5 py-1.5 rounded-lg text-xs font-bold bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 transition active:scale-95 cursor-pointer text-center truncate flex items-center justify-center gap-1"><i data-lucide="rotate-ccw" class="w-3 h-3 shrink-0"></i><span class="truncate">${btn.label}</span></button>`;
+      } else {
+        return `<button type="button" data-val="${btn.val}" class="btn-filter-week px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-zinc-900/90 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-800 transition active:scale-95 cursor-pointer text-center truncate">${btn.label}</button>`;
+      }
+    }).join('');
+
+    container.querySelectorAll('.btn-filter-week').forEach(b => {
+      b.addEventListener('click', () => {
+        activeFilterWeek = b.getAttribute('data-val');
+        renderWeekFilterButtons();
+        loadAttendanceData();
+      });
+    });
+    lucide.createIcons();
+  }
+
+  // 4. Render Day Filter Buttons (Maksimal 6 per baris mendatar seperti kalender)
+  function renderDayFilterButtons() {
+    const container = document.getElementById('filterButtonsDay');
+    const badge = document.getElementById('badgeActiveDay');
+    if (!container) return;
+
+    if (badge) {
+      badge.textContent = activeFilterDay === 'ALL' ? 'Aktif: Semua Tanggal' : `Aktif: Tanggal ${activeFilterDay}`;
+    }
+
+    const buttons = [];
+    if (activeFilterDay !== 'ALL') {
+      buttons.push({ val: 'ALL', label: 'Semua Tgl', isReset: true });
+    }
+    for (let d = 1; d <= 31; d++) {
+      const dayStr = String(d).padStart(2, '0');
+      if (dayStr !== activeFilterDay) {
+        buttons.push({ val: dayStr, label: `Tgl ${dayStr}`, isReset: false });
+      }
+    }
+
+    container.innerHTML = buttons.map(btn => {
+      if (btn.isReset) {
+        return `<button type="button" data-val="${btn.val}" class="btn-filter-day px-2 py-1.5 rounded-lg text-xs font-bold bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 transition active:scale-95 cursor-pointer text-center truncate flex items-center justify-center gap-1"><i data-lucide="rotate-ccw" class="w-3 h-3 shrink-0"></i><span class="truncate">${btn.label}</span></button>`;
+      } else {
+        return `<button type="button" data-val="${btn.val}" class="btn-filter-day px-2 py-1.5 rounded-lg text-xs font-semibold bg-zinc-900/90 hover:bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-800 transition active:scale-95 cursor-pointer text-center truncate">${btn.label}</button>`;
+      }
+    }).join('');
+
+    container.querySelectorAll('.btn-filter-day').forEach(b => {
+      b.addEventListener('click', () => {
+        activeFilterDay = b.getAttribute('data-val');
+        renderDayFilterButtons();
+        loadAttendanceData();
+      });
+    });
+    lucide.createIcons();
+  }
+
   function initPeriodFilters() {
-    const selectFilterYear = document.getElementById('selectFilterYear');
-    const selectFilterMonth = document.getElementById('selectFilterMonth');
-    const selectFilterWeek = document.getElementById('selectFilterWeek');
-    const selectFilterDay = document.getElementById('selectFilterDay');
     const filterSearch = document.getElementById('filterSearch');
     const btnResetFilter = document.getElementById('btnResetFilter');
     const btnExportCsv = document.getElementById('btnExportCsv');
     const btnResetData = document.getElementById('btnResetData');
 
-    if (selectFilterYear) {
-      selectFilterYear.addEventListener('change', () => {
-        updateMonthOptions();
-        loadAttendanceData();
-      });
-    }
-
-    if (selectFilterMonth) {
-      selectFilterMonth.addEventListener('change', () => {
-        loadAttendanceData();
-      });
-    }
-
-    if (selectFilterWeek) {
-      selectFilterWeek.addEventListener('change', () => {
-        loadAttendanceData();
-      });
-    }
-
-    if (selectFilterDay) {
-      selectFilterDay.addEventListener('change', () => {
-        loadAttendanceData();
-      });
-    }
+    renderYearFilterButtons();
+    renderMonthFilterButtons();
+    renderWeekFilterButtons();
+    renderDayFilterButtons();
 
     if (filterSearch) {
       filterSearch.addEventListener('input', () => {
@@ -1482,12 +1663,15 @@
 
     if (btnResetFilter) {
       btnResetFilter.addEventListener('click', () => {
-        if (selectFilterYear) selectFilterYear.value = 'ALL';
-        updateMonthOptions();
-        if (selectFilterMonth) selectFilterMonth.value = 'ALL';
-        if (selectFilterWeek) selectFilterWeek.value = 'ALL';
-        if (selectFilterDay) selectFilterDay.value = 'ALL';
+        activeFilterYear = 'ALL';
+        activeFilterMonth = 'ALL';
+        activeFilterWeek = 'ALL';
+        activeFilterDay = 'ALL';
         if (filterSearch) filterSearch.value = '';
+        renderYearFilterButtons();
+        renderMonthFilterButtons();
+        renderWeekFilterButtons();
+        renderDayFilterButtons();
         loadAttendanceData();
       });
     }
@@ -1507,123 +1691,17 @@
         saveTokens([]);
         createNewActiveToken('MASUK');
         createNewActiveToken('KELUAR');
-        populateYearFilter();
-        populateDayFilter();
+        activeFilterYear = 'ALL';
+        activeFilterMonth = 'ALL';
+        activeFilterWeek = 'ALL';
+        activeFilterDay = 'ALL';
+        renderYearFilterButtons();
+        renderMonthFilterButtons();
+        renderWeekFilterButtons();
+        renderDayFilterButtons();
         loadAttendanceData();
         showToast('Data Direset', 'Seluruh data presensi telah dikosongkan.');
       });
-    }
-  }
-
-  // Populate dynamic Year selector starting strictly from 2026 onwards
-  function populateYearFilter() {
-    const selectFilterYear = document.getElementById('selectFilterYear');
-    if (!selectFilterYear) return;
-
-    const attendances = getStoredAttendances();
-    const currentYear = new Date().getFullYear();
-    const minYear = 2026;
-    const yearSet = new Set();
-    yearSet.add(2026);
-    if (currentYear > 2026) {
-      yearSet.add(currentYear);
-    }
-
-    attendances.forEach(a => {
-      if (a.date) {
-        const yr = parseInt(a.date.split('-')[0], 10);
-        if (!isNaN(yr) && yr >= minYear) {
-          yearSet.add(yr);
-        }
-      }
-    });
-
-    const years = Array.from(yearSet).sort((a, b) => a - b);
-    const prevVal = selectFilterYear.value;
-
-    selectFilterYear.innerHTML = '<option value="ALL">Semua Tahun (Mulai 2026)</option>';
-    years.forEach(y => {
-      const opt = document.createElement('option');
-      opt.value = String(y);
-      opt.textContent = `Tahun ${y}`;
-      selectFilterYear.appendChild(opt);
-    });
-
-    if (prevVal && (prevVal === 'ALL' || years.map(String).includes(prevVal))) {
-      selectFilterYear.value = prevVal;
-    } else {
-      selectFilterYear.value = 'ALL';
-    }
-
-    updateMonthOptions();
-  }
-
-  // Update Month options dynamically (For 2026, strictly August onwards)
-  function updateMonthOptions() {
-    const selectFilterYear = document.getElementById('selectFilterYear');
-    const selectFilterMonth = document.getElementById('selectFilterMonth');
-    if (!selectFilterMonth) return;
-
-    const selectedYear = selectFilterYear ? selectFilterYear.value : 'ALL';
-    const prevVal = selectFilterMonth.value;
-
-    const allMonths = [
-      { val: '01', name: 'Januari' },
-      { val: '02', name: 'Februari' },
-      { val: '03', name: 'Maret' },
-      { val: '04', name: 'April' },
-      { val: '05', name: 'Mei' },
-      { val: '06', name: 'Juni' },
-      { val: '07', name: 'Juli' },
-      { val: '08', name: 'Agustus' },
-      { val: '09', name: 'September' },
-      { val: '10', name: 'Oktober' },
-      { val: '11', name: 'November' },
-      { val: '12', name: 'Desember' }
-    ];
-
-    // Constrain: Year 2026 starts strictly from August (08) onwards
-    const availableMonths = (selectedYear === '2026')
-      ? allMonths.filter(m => parseInt(m.val, 10) >= 8)
-      : allMonths;
-
-    selectFilterMonth.innerHTML = (selectedYear === '2026')
-      ? '<option value="ALL">Semua Bulan (Mulai Ags)</option>'
-      : '<option value="ALL">Semua Bulan</option>';
-
-    availableMonths.forEach(m => {
-      const opt = document.createElement('option');
-      opt.value = m.val;
-      opt.textContent = m.name;
-      selectFilterMonth.appendChild(opt);
-    });
-
-    if (availableMonths.some(m => m.val === prevVal)) {
-      selectFilterMonth.value = prevVal;
-    } else {
-      selectFilterMonth.value = 'ALL';
-    }
-  }
-
-  // Populate Day selector dropdown (Tanggal 01 s/d 31 - no HTML datepicker)
-  function populateDayFilter() {
-    const selectFilterDay = document.getElementById('selectFilterDay');
-    if (!selectFilterDay) return;
-
-    const prevVal = selectFilterDay.value;
-    selectFilterDay.innerHTML = '<option value="ALL">Semua Tanggal</option>';
-    for (let d = 1; d <= 31; d++) {
-      const dayStr = String(d).padStart(2, '0');
-      const opt = document.createElement('option');
-      opt.value = dayStr;
-      opt.textContent = `Tanggal ${dayStr}`;
-      selectFilterDay.appendChild(opt);
-    }
-
-    if (prevVal && prevVal !== 'ALL') {
-      selectFilterDay.value = prevVal;
-    } else {
-      selectFilterDay.value = 'ALL';
     }
   }
 
@@ -1635,23 +1713,15 @@
     const metricMasukCount = document.getElementById('metricMasukCount');
     const metricKeluarCount = document.getElementById('metricKeluarCount');
     const metricTotalAllTime = document.getElementById('metricTotalAllTime');
-
-    const selectFilterYear = document.getElementById('selectFilterYear');
-    const selectFilterMonth = document.getElementById('selectFilterMonth');
-    const selectFilterWeek = document.getElementById('selectFilterWeek');
-    const selectFilterDay = document.getElementById('selectFilterDay');
     const filterSearch = document.getElementById('filterSearch');
 
     if (!attendanceTableBody) return;
 
     const all = getStoredAttendances();
-    const now = new Date();
-    const todayStr = getLocalDateString(now);
-
-    const selectedYear = selectFilterYear ? selectFilterYear.value : 'ALL';
-    const selectedMonth = selectFilterMonth ? selectFilterMonth.value : 'ALL';
-    const selectedWeek = selectFilterWeek ? selectFilterWeek.value : 'ALL';
-    const selectedDay = selectFilterDay ? selectFilterDay.value : 'ALL';
+    const selectedYear = activeFilterYear;
+    const selectedMonth = activeFilterMonth;
+    const selectedWeek = activeFilterWeek;
+    const selectedDay = activeFilterDay;
     const searchTerm = filterSearch ? filterSearch.value.trim().toLowerCase() : '';
 
     // Apply combined filters (Strictly starting from August 2026)
@@ -1689,7 +1759,7 @@
         }
       }
 
-      // 5. Day Dropdown filter (Full tulisan Tanggal 01 - 31)
+      // 5. Day filter (Tanggal 01 - 31)
       if (selectedDay !== 'ALL') {
         const itemDay = (item.date || '').split('-')[2];
         if (itemDay !== selectedDay) return false;
