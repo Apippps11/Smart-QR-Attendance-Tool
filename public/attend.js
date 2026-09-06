@@ -107,6 +107,21 @@ document.addEventListener('DOMContentLoaded', async () => {
   // JIKA ADA TOKEN -> Set UI Token & Format Tanggal Terkunci
   badgeToken.textContent = token;
 
+  // Validasi kecocokan tipe QR code (Task 9)
+  const expectedTypeParam = (urlParams.get('type') || '').toUpperCase();
+  let tokenType = null;
+  if (token.includes('-OUT-') || token.startsWith('QR-OUT-')) tokenType = 'KELUAR';
+  else if (token.includes('-IN-') || token.startsWith('QR-IN-')) tokenType = 'MASUK';
+
+  if (expectedTypeParam && tokenType && expectedTypeParam !== tokenType) {
+    checkingSection.classList.add('hidden');
+    errorSection.classList.remove('hidden');
+    errorTitle.textContent = 'QR Code Tidak Sesuai';
+    errorMessage.textContent = `Anda sedang membuka absensi ${expectedTypeParam === 'MASUK' ? 'Masuk' : 'Keluar'}, namun QR Code yang discan adalah untuk Absensi ${tokenType === 'MASUK' ? 'Masuk' : 'Keluar'}.`;
+    lucide.createIcons();
+    return;
+  }
+
   if (displayDate) {
     displayDate.textContent = fullRegionalDate;
   }

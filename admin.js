@@ -74,8 +74,8 @@
   // Admin Multi-Account Storage & Defaults
   const STORAGE_ADMIN_ACCOUNTS = 'sqr_admin_accounts';
   const DEFAULT_ADMIN_ACCOUNTS = [
-    { username: 'Admin1118', password: 'AFIFweb18', role: 'Super Admin', createdAt: '2026-01-01' },
-    { username: 'Admin2', password: 'AFIFweb18', role: 'Admin', createdAt: '2026-01-01' }
+    { username: 'Admin1118', password: 'AFIFweb18', role: 'Super Admin', createdAt: '2026-01-01', activeDeviceId: null, deviceInfo: null, isOnline: false, lastLoginAt: null },
+    { username: 'Admin2', password: 'AFIFweb18', role: 'Admin', createdAt: '2026-01-01', activeDeviceId: null, deviceInfo: null, isOnline: false, lastLoginAt: null }
   ];
 
   function getAdminAccounts() {
@@ -90,7 +90,13 @@
         localStorage.setItem(STORAGE_ADMIN_ACCOUNTS, JSON.stringify(DEFAULT_ADMIN_ACCOUNTS));
         return DEFAULT_ADMIN_ACCOUNTS;
       }
-      return parsed;
+      return parsed.map(acc => ({
+        ...acc,
+        activeDeviceId: acc.activeDeviceId || null,
+        deviceInfo: acc.deviceInfo || null,
+        isOnline: !!acc.isOnline,
+        lastLoginAt: acc.lastLoginAt || null
+      }));
     } catch (e) {
       return DEFAULT_ADMIN_ACCOUNTS;
     }
@@ -114,6 +120,9 @@
   let activeScannedSession = null;
   let adminInitialized = false;
   let returnCountdownTimer = null;
+  let pendingNewAdmin = null;
+  let pendingDeleteUsername = null;
+  let pendingSwitchUsername = null;
 
   // Session ID for MQTT Sync
   let adminSessionId = localStorage.getItem(STORAGE_SESSION);
@@ -208,6 +217,16 @@
   function handleAdminLogout() {
     if (confirm('Keluar dari sesi admin (Log Out)?')) {
       try {
+        const currentUsername = sessionStorage.getItem('sqr_admin_username');
+        if (currentUsername) {
+          const accounts = getAdminAccounts();
+          const me = accounts.find(a => a.username.toLowerCase() === currentUsername.toLowerCase());
+          if (me) {
+            me.isOnline = false;
+            me.activeDeviceId = null;
+            saveAdminAccounts(accounts);
+          }
+        }
         sessionStorage.removeItem(STORAGE_AUTH);
         sessionStorage.removeItem('sqr_admin_username');
       } catch (err) {}
@@ -456,12 +475,119 @@
       }
     }
 
+    // Universal Password Eye Toggle Helper (supports click and press-and-hold)
+    function setupPasswordEyeToggle(btnEl, inputEl, openIconEl, closedIconEl) {
+      if (!btnEl || !inputEl || btnEl._hasHoldListeners) return;
+      btnEl._hasHoldListeners = true;
+
+      let isDown = false;
+      let startTime = 0;
+      let wasText = false;
+      let lastRelease = 0;
+
+      function setVis(show) {
+        inputEl.type = show ? 'text' : 'password';
+        if (openIconEl && closedIconEl) {
+          if (show) {
+            openIconEl.classList.add('hidden');
+            closedIconEl.classList.remove('hidden');
+          } else {
+            openIconEl.classList.remove('hidden');
+            closedIconEl.classList.add('hidden');
+          }
+        }
+        if (show) {
+          btnEl.classList.add('text-indigo-400');
+          btnEl.classList.remove('text-zinc-400');
+        } else {
+          btnEl.classList.remove('text-indigo-400');
+          btnEl.classList.add('text-zinc-400');
+        }
+      }
+
+      function onDown(e) {
+        if (e.button && e.button !== 0) return;
+        if (e.cancelable) e.preventDefault();
+        isDown = true;
+        startTime = Date.now();
+        wasText = (inputEl.type === 'text');
+        if (!wasText) setVis(true);
+      }
+
+      function onUp(e) {
+        if (!isDown) return;
+        isDown = false;
+        lastRelease = Date.now();
+        if (Date.now() - startTime >= 250) {
+          setVis(wasText);
+        } else {
+          setVis(!wasText);
+        }
+        try { inputEl.focus(); } catch (err) {}
+      }
+
+      function onCancel() {
+        if (!isDown) return;
+        isDown = false;
+        setVis(wasText);
+      }
+
+      btnEl.addEventListener('pointerdown', onDown);
+      btnEl.addEventListener('pointerup', onUp);
+      btnEl.addEventListener('pointercancel', onCancel);
+      btnEl.addEventListener('pointerleave', onCancel);
+      btnEl.addEventListener('contextmenu', (e) => { e.preventDefault(); e.stopPropagation(); return false; });
+      btnEl.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (Date.now() - lastRelease > 350) {
+          setVis(inputEl.type === 'password');
+        }
+      });
+
+      if (!window.PointerEvent) {
+        btnEl.addEventListener('mousedown', onDown);
+        btnEl.addEventListener('mouseup', onUp);
+        btnEl.addEventListener('mouseleave', onCancel);
+        btnEl.addEventListener('touchstart', onDown, { passive: false });
+        btnEl.addEventListener('touchend', onUp);
+        btnEl.addEventListener('touchcancel', onCancel);
+      }
+    }
+
+    // Connect eye toggles for all modals & forms
+    setupPasswordEyeToggle(
+      document.getElementById('btnToggleNewAdminPass'),
+      document.getElementById('newAdminPass'),
+      document.getElementById('eyeNewAdminOpen'),
+      document.getElementById('eyeNewAdminClosed')
+    );
+    setupPasswordEyeToggle(
+      document.getElementById('btnToggleConfirmAddAdminPass'),
+      document.getElementById('inputConfirmAddAdminPass'),
+      document.getElementById('eyeConfirmAddOpen'),
+      document.getElementById('eyeConfirmAddClosed')
+    );
+    setupPasswordEyeToggle(
+      document.getElementById('btnToggleDeleteAdminPass'),
+      document.getElementById('inputDeleteAdminPass'),
+      document.getElementById('eyeDeleteAdminOpen'),
+      document.getElementById('eyeDeleteAdminClosed')
+    );
+    setupPasswordEyeToggle(
+      document.getElementById('btnToggleSwitchAdminPass'),
+      document.getElementById('inputSwitchAdminPass'),
+      document.getElementById('eyeSwitchAdminOpen'),
+      document.getElementById('eyeSwitchAdminClosed')
+    );
+
     // Gate modal actions
     if (btnOpenAdminLogin) {
       btnOpenAdminLogin.addEventListener('click', () => {
         gateModal.classList.add('hidden');
         adminLoginModal.classList.remove('hidden');
         loginError.classList.add('hidden');
+        loginError.textContent = 'Username atau password salah!';
         inputUsername.value = '';
         inputPassword.value = '';
         setPasswordVisibility(false);
@@ -486,6 +612,21 @@
       const matched = accounts.find(a => a.username.trim().toLowerCase() === user.toLowerCase() && a.password === pass);
 
       if (matched) {
+        const currentDev = window.DeviceFingerprint ? window.DeviceFingerprint.getDeviceInfo() : { deviceId: 'dev_local', deviceInfo: 'Perangkat Ini' };
+
+        // Requirement 5: Single device enforcement
+        if (matched.isOnline && matched.activeDeviceId && matched.activeDeviceId !== currentDev.deviceId) {
+          loginError.textContent = `Akun "${matched.username}" sedang aktif di perangkat lain (${matched.deviceInfo || 'Perangkat Lain'}). Satu akun admin hanya boleh login di 1 perangkat pada waktu yang sama.`;
+          loginError.classList.remove('hidden');
+          return;
+        }
+
+        matched.isOnline = true;
+        matched.activeDeviceId = currentDev.deviceId;
+        matched.deviceInfo = currentDev.deviceInfo;
+        matched.lastLoginAt = new Date().toISOString();
+        saveAdminAccounts(accounts);
+
         setPasswordVisibility(false);
         try {
           sessionStorage.setItem(STORAGE_AUTH, 'true');
@@ -494,6 +635,7 @@
         checkAuthStatus();
         showToast('Login Berhasil', `Akses dibuka. Selamat datang ${matched.username}.`);
       } else {
+        loginError.textContent = 'Username atau password salah!';
         loginError.classList.remove('hidden');
         if (inputPassword) {
           inputPassword.value = '';
@@ -504,6 +646,184 @@
 
     if (btnLogoutAdmin) {
       btnLogoutAdmin.addEventListener('click', handleAdminLogout);
+    }
+
+    // Modal Confirmation: Add New Admin (Task 4)
+    const modalConfirmAddAdmin = document.getElementById('modalConfirmAddAdmin');
+    const formConfirmAddAdmin = document.getElementById('formConfirmAddAdmin');
+    const inputConfirmAddAdminPass = document.getElementById('inputConfirmAddAdminPass');
+    const confirmAddAdminError = document.getElementById('confirmAddAdminError');
+    const btnCancelConfirmAddAdmin = document.getElementById('btnCancelConfirmAddAdmin');
+
+    if (btnCancelConfirmAddAdmin && modalConfirmAddAdmin) {
+      btnCancelConfirmAddAdmin.addEventListener('click', () => {
+        modalConfirmAddAdmin.classList.add('hidden');
+        pendingNewAdmin = null;
+      });
+    }
+
+    if (formConfirmAddAdmin) {
+      formConfirmAddAdmin.addEventListener('submit', (e) => {
+        e.preventDefault();
+        if (!pendingNewAdmin) return;
+        const retyped = inputConfirmAddAdminPass ? inputConfirmAddAdminPass.value : '';
+        if (retyped !== pendingNewAdmin.password) {
+          if (confirmAddAdminError) confirmAddAdminError.classList.remove('hidden');
+          if (inputConfirmAddAdminPass) inputConfirmAddAdminPass.focus();
+          return;
+        }
+
+        const accounts = getAdminAccounts();
+        accounts.push({
+          username: pendingNewAdmin.username,
+          password: pendingNewAdmin.password,
+          role: 'Admin',
+          createdAt: getLocalDateString(),
+          activeDeviceId: null,
+          deviceInfo: null,
+          isOnline: false,
+          lastLoginAt: null
+        });
+        saveAdminAccounts(accounts);
+
+        if (modalConfirmAddAdmin) modalConfirmAddAdmin.classList.add('hidden');
+        const newAdminUser = document.getElementById('newAdminUser');
+        const newAdminPass = document.getElementById('newAdminPass');
+        if (newAdminUser) newAdminUser.value = '';
+        if (newAdminPass) newAdminPass.value = '';
+
+        renderAdminAccountsList();
+        renderSwitchAdminList();
+        showToast('Admin Ditambahkan', `Akun admin "${pendingNewAdmin.username}" berhasil dibuat dan siap digunakan.`);
+        pendingNewAdmin = null;
+      });
+    }
+
+    // Modal Confirmation: Delete Admin (Task 6)
+    const modalConfirmDeleteAdmin = document.getElementById('modalConfirmDeleteAdmin');
+    const formConfirmDeleteAdmin = document.getElementById('formConfirmDeleteAdmin');
+    const inputDeleteAdminPass = document.getElementById('inputDeleteAdminPass');
+    const deleteAdminError = document.getElementById('deleteAdminError');
+    const btnCancelDeleteAdmin = document.getElementById('btnCancelDeleteAdmin');
+
+    if (btnCancelDeleteAdmin && modalConfirmDeleteAdmin) {
+      btnCancelDeleteAdmin.addEventListener('click', () => {
+        modalConfirmDeleteAdmin.classList.add('hidden');
+        pendingDeleteUsername = null;
+      });
+    }
+
+    if (formConfirmDeleteAdmin) {
+      formConfirmDeleteAdmin.addEventListener('submit', (e) => {
+        e.preventDefault();
+        if (!pendingDeleteUsername) return;
+        const accounts = getAdminAccounts();
+        const target = accounts.find(a => a.username.toLowerCase() === pendingDeleteUsername.toLowerCase());
+        const passEntered = inputDeleteAdminPass ? inputDeleteAdminPass.value : '';
+
+        if (!target || passEntered !== target.password) {
+          if (deleteAdminError) deleteAdminError.classList.remove('hidden');
+          if (inputDeleteAdminPass) inputDeleteAdminPass.focus();
+          return;
+        }
+
+        const updated = accounts.filter(a => a.username.toLowerCase() !== pendingDeleteUsername.toLowerCase());
+        saveAdminAccounts(updated);
+
+        if (modalConfirmDeleteAdmin) modalConfirmDeleteAdmin.classList.add('hidden');
+        renderAdminAccountsList();
+        renderSwitchAdminList();
+        showToast('Admin Dihapus', `Akun "${pendingDeleteUsername}" telah dihapus dari seluruh sistem.`);
+
+        const activeUser = sessionStorage.getItem('sqr_admin_username');
+        if (activeUser && activeUser.toLowerCase() === pendingDeleteUsername.toLowerCase()) {
+          handleAdminLogout();
+        }
+        pendingDeleteUsername = null;
+      });
+    }
+
+    // Modal Confirmation: Switch Admin Account (Task 8)
+    const modalConfirmSwitchAdmin = document.getElementById('modalConfirmSwitchAdmin');
+    const formConfirmSwitchAdmin = document.getElementById('formConfirmSwitchAdmin');
+    const inputSwitchAdminPass = document.getElementById('inputSwitchAdminPass');
+    const switchAdminError = document.getElementById('switchAdminError');
+    const btnCancelSwitchAdmin = document.getElementById('btnCancelSwitchAdmin');
+
+    if (btnCancelSwitchAdmin && modalConfirmSwitchAdmin) {
+      btnCancelSwitchAdmin.addEventListener('click', () => {
+        modalConfirmSwitchAdmin.classList.add('hidden');
+        pendingSwitchUsername = null;
+      });
+    }
+
+    if (formConfirmSwitchAdmin) {
+      formConfirmSwitchAdmin.addEventListener('submit', (e) => {
+        e.preventDefault();
+        if (!pendingSwitchUsername) return;
+        const accounts = getAdminAccounts();
+        const target = accounts.find(a => a.username.toLowerCase() === pendingSwitchUsername.toLowerCase());
+        const passEntered = inputSwitchAdminPass ? inputSwitchAdminPass.value : '';
+
+        if (!target || passEntered !== target.password) {
+          if (switchAdminError) switchAdminError.classList.remove('hidden');
+          if (inputSwitchAdminPass) inputSwitchAdminPass.focus();
+          return;
+        }
+
+        const currentDev = window.DeviceFingerprint ? window.DeviceFingerprint.getDeviceInfo() : { deviceId: 'dev_local', deviceInfo: 'Perangkat Ini' };
+        if (target.isOnline && target.activeDeviceId && target.activeDeviceId !== currentDev.deviceId) {
+          alert(`Akun "${target.username}" sedang aktif di perangkat lain (${target.deviceInfo || 'Perangkat Lain'}).`);
+          if (modalConfirmSwitchAdmin) modalConfirmSwitchAdmin.classList.add('hidden');
+          return;
+        }
+
+        // Deactivate old active admin
+        const activeUser = sessionStorage.getItem('sqr_admin_username');
+        if (activeUser) {
+          const old = accounts.find(a => a.username.toLowerCase() === activeUser.toLowerCase());
+          if (old) {
+            old.isOnline = false;
+            old.activeDeviceId = null;
+          }
+        }
+
+        // Activate target account on this device
+        target.isOnline = true;
+        target.activeDeviceId = currentDev.deviceId;
+        target.deviceInfo = currentDev.deviceInfo;
+        target.lastLoginAt = new Date().toISOString();
+        saveAdminAccounts(accounts);
+
+        sessionStorage.setItem('sqr_admin_username', target.username);
+        if (modalConfirmSwitchAdmin) modalConfirmSwitchAdmin.classList.add('hidden');
+        renderAdminAccountsList();
+        renderSwitchAdminList();
+        showToast('Beralih Akun', `Sesi dialihkan ke akun "${target.username}".`);
+        pendingSwitchUsername = null;
+      });
+    }
+
+    // Modal: QR Code Type Mismatch Controller (Task 9)
+    const modalWrongQrType = document.getElementById('modalWrongQrType');
+    const btnReturnWrongQr = document.getElementById('btnReturnWrongQr');
+    const btnRescanWrongQr = document.getElementById('btnRescanWrongQr');
+
+    if (btnReturnWrongQr) {
+      btnReturnWrongQr.addEventListener('click', () => {
+        if (modalWrongQrType) modalWrongQrType.classList.add('hidden');
+        if (absensiChoiceModal) absensiChoiceModal.classList.remove('hidden');
+        lucide.createIcons();
+      });
+    }
+
+    if (btnRescanWrongQr) {
+      btnRescanWrongQr.addEventListener('click', () => {
+        if (modalWrongQrType) modalWrongQrType.classList.add('hidden');
+        if (cameraScanModal) cameraScanModal.classList.remove('hidden');
+        startInAppCameraScanner();
+        lucide.createIcons();
+      });
     }
 
     // 2. ABSENSI CHOICE ACTIONS
@@ -641,6 +961,36 @@
 
       stopInAppCameraScanner();
       cameraScanModal.classList.add('hidden');
+
+      // Requirement: Check for QR type mismatch (Task 9)
+      const scannedType = qrData.type ? qrData.type.toUpperCase() : null;
+      if (scannedType && currentAttendanceType && scannedType !== currentAttendanceType) {
+        const modalWrongQrType = document.getElementById('modalWrongQrType');
+        const wrongQrExpectedType = document.getElementById('wrongQrExpectedType');
+        const wrongQrScannedType = document.getElementById('wrongQrScannedType');
+        const wrongQrTypeMessage = document.getElementById('wrongQrTypeMessage');
+
+        const expectedText = currentAttendanceType === 'MASUK' ? 'ABSENSI MASUK' : 'ABSENSI KELUAR';
+        const scannedText = scannedType === 'MASUK' ? 'ABSENSI MASUK' : 'ABSENSI KELUAR';
+
+        if (wrongQrExpectedType) {
+          wrongQrExpectedType.textContent = expectedText;
+          wrongQrExpectedType.className = currentAttendanceType === 'MASUK' ? 'font-bold text-emerald-400' : 'font-bold text-rose-400';
+        }
+        if (wrongQrScannedType) {
+          wrongQrScannedType.textContent = scannedText;
+          wrongQrScannedType.className = scannedType === 'MASUK' ? 'font-bold text-emerald-400' : 'font-bold text-rose-400';
+        }
+        if (wrongQrTypeMessage) {
+          wrongQrTypeMessage.textContent = `Anda sedang berada di menu ${expectedText}, namun QR Code yang Anda scan adalah ${scannedText}.`;
+        }
+
+        if (modalWrongQrType) {
+          modalWrongQrType.classList.remove('hidden');
+          lucide.createIcons();
+        }
+        return;
+      }
 
       activeScannedToken = qrData.token;
       activeScannedSession = qrData.session;
@@ -1167,6 +1517,7 @@
       if (viewName === 'settings') {
         viewSettings.classList.remove('hidden');
         renderAdminAccountsList();
+        renderSwitchAdminList();
       } else {
         viewSettings.classList.add('hidden');
       }
@@ -1237,15 +1588,30 @@
     if (!listEl) return;
     const accounts = getAdminAccounts();
     const canDelete = accounts.length > 1;
+    const currentDev = window.DeviceFingerprint ? window.DeviceFingerprint.getDeviceInfo() : { deviceId: 'dev_local', deviceInfo: 'Perangkat Ini' };
 
     listEl.innerHTML = accounts.map(acc => {
+      let statusBadge = '';
+      if (acc.isOnline) {
+        if (acc.activeDeviceId === currentDev.deviceId) {
+          statusBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">Online • ${escapeHtml(acc.deviceInfo || 'Perangkat Ini')} (Perangkat Ini)</span>`;
+        } else {
+          statusBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-500/15 text-amber-400 border border-amber-500/30">Online • ${escapeHtml(acc.deviceInfo || 'Perangkat Lain')}</span>`;
+        }
+      } else {
+        statusBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-mono font-medium bg-zinc-800 text-zinc-400 border border-zinc-700">Offline</span>`;
+      }
+
       return `
-        <div class="p-2.5 rounded-xl bg-zinc-900/80 border border-zinc-800 flex items-center justify-between text-xs">
+        <div class="p-2.5 rounded-xl bg-zinc-900/80 border border-zinc-800 flex flex-wrap items-center justify-between gap-2 text-xs">
           <div class="flex items-center gap-2">
-            <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+            <span class="w-2 h-2 rounded-full ${acc.isOnline ? 'bg-emerald-400 animate-pulse' : 'bg-zinc-600'}"></span>
             <div>
-              <div class="font-bold text-white font-mono">${escapeHtml(acc.username)}</div>
-              <div class="text-[10px] text-zinc-400">${acc.role || 'Admin'}</div>
+              <div class="font-bold text-white font-mono flex items-center gap-2">
+                <span>${escapeHtml(acc.username)}</span>
+                <span class="text-[10px] font-normal text-zinc-400">(${acc.role || 'Admin'})</span>
+              </div>
+              <div class="mt-0.5">${statusBadge}</div>
             </div>
           </div>
           <div class="flex items-center gap-1.5">
@@ -1272,18 +1638,18 @@
           alert('Tidak dapat menghapus akun admin terakhir. Minimal harus ada 1 akun admin aktif di sistem.');
           return;
         }
-        if (confirm(`Hapus akun admin "${u}" dari seluruh data sistem?`)) {
-          const updated = current.filter(a => a.username.toLowerCase() !== u.toLowerCase());
-          saveAdminAccounts(updated);
-          renderAdminAccountsList();
-          showToast('Admin Dihapus', `Akun "${u}" berhasil dihapus dari data utama.`);
 
-          // If current logged-in user was deleted, trigger logout immediately
-          const activeUser = sessionStorage.getItem('sqr_admin_username');
-          if (activeUser && activeUser.toLowerCase() === u.toLowerCase()) {
-            handleAdminLogout();
-          }
-        }
+        pendingDeleteUsername = u;
+        const modal = document.getElementById('modalConfirmDeleteAdmin');
+        const userText = document.getElementById('confirmDeleteAdminUserText');
+        const passInput = document.getElementById('inputDeleteAdminPass');
+        const errText = document.getElementById('deleteAdminError');
+        if (userText) userText.textContent = u;
+        if (passInput) passInput.value = '';
+        if (errText) errText.classList.add('hidden');
+        if (modal) modal.classList.remove('hidden');
+        if (passInput) passInput.focus();
+        lucide.createIcons();
       });
     });
 
@@ -1312,19 +1678,113 @@
           return;
         }
 
-        accounts.push({
-          username,
-          password,
-          role: 'Admin',
-          createdAt: getLocalDateString()
-        });
-        saveAdminAccounts(accounts);
-        if (newAdminUser) newAdminUser.value = '';
-        if (newAdminPass) newAdminPass.value = '';
-        renderAdminAccountsList();
-        showToast('Admin Ditambahkan', `Akun admin "${username}" aktif dan siap digunakan.`);
+        pendingNewAdmin = { username, password };
+        const modal = document.getElementById('modalConfirmAddAdmin');
+        const userText = document.getElementById('confirmAddAdminUserText');
+        const passInput = document.getElementById('inputConfirmAddAdminPass');
+        const errText = document.getElementById('confirmAddAdminError');
+        if (userText) userText.textContent = username;
+        if (passInput) passInput.value = '';
+        if (errText) errText.classList.add('hidden');
+        if (modal) modal.classList.remove('hidden');
+        if (passInput) passInput.focus();
+        lucide.createIcons();
       });
     }
+  }
+
+  function renderSwitchAdminList() {
+    const listEl = document.getElementById('switchAdminList');
+    const badgeEl = document.getElementById('currentAdminBadge');
+    const activeUsername = sessionStorage.getItem('sqr_admin_username') || 'Admin1118';
+    if (badgeEl) badgeEl.textContent = activeUsername;
+    if (!listEl) return;
+
+    const accounts = getAdminAccounts();
+    const currentDev = window.DeviceFingerprint ? window.DeviceFingerprint.getDeviceInfo() : { deviceId: 'dev_local', deviceInfo: 'Perangkat Ini' };
+
+    listEl.innerHTML = accounts.map(acc => {
+      const isCurrentActive = acc.username.toLowerCase() === activeUsername.toLowerCase();
+      const isOnlineOtherDevice = acc.isOnline && acc.activeDeviceId && acc.activeDeviceId !== currentDev.deviceId;
+
+      if (isCurrentActive) {
+        return `
+          <div class="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 space-y-2 relative">
+            <div class="flex items-center justify-between">
+              <span class="font-bold text-white text-xs font-mono">${escapeHtml(acc.username)}</span>
+              <span class="text-[10px] font-bold text-emerald-400 bg-emerald-500/20 px-2 py-0.5 rounded border border-emerald-500/30">Aktif Saat Ini</span>
+            </div>
+            <div class="text-[11px] text-zinc-400 flex items-center gap-1.5">
+              <i data-lucide="laptop" class="w-3.5 h-3.5 text-emerald-400"></i>
+              <span class="truncate">${escapeHtml(acc.deviceInfo || 'Perangkat Ini')}</span>
+            </div>
+            <div class="pt-1">
+              <span class="block w-full py-1.5 text-center rounded-lg bg-emerald-500/20 text-emerald-300 font-semibold text-[11px]">
+                Sedang Digunakan
+              </span>
+            </div>
+          </div>
+        `;
+      } else if (isOnlineOtherDevice) {
+        return `
+          <div class="p-3.5 rounded-xl bg-rose-500/5 border border-rose-500/20 space-y-2 opacity-80">
+            <div class="flex items-center justify-between">
+              <span class="font-bold text-white text-xs font-mono">${escapeHtml(acc.username)}</span>
+              <span class="text-[10px] font-bold text-rose-400 bg-rose-500/20 px-2 py-0.5 rounded border border-rose-500/30">Dipakai di Perangkat Lain</span>
+            </div>
+            <div class="text-[11px] text-zinc-400 flex items-center gap-1.5">
+              <i data-lucide="shield-alert" class="w-3.5 h-3.5 text-rose-400"></i>
+              <span class="truncate">${escapeHtml(acc.deviceInfo || 'Perangkat Lain')}</span>
+            </div>
+            <div class="pt-1">
+              <button type="button" disabled
+                class="w-full py-1.5 rounded-lg bg-zinc-800 text-zinc-500 text-[11px] font-semibold cursor-not-allowed">
+                Tidak Dapat Dipilih
+              </button>
+            </div>
+          </div>
+        `;
+      } else {
+        return `
+          <div class="p-3.5 rounded-xl bg-zinc-900/90 border border-zinc-800 hover:border-indigo-500/50 transition space-y-2">
+            <div class="flex items-center justify-between">
+              <span class="font-bold text-white text-xs font-mono">${escapeHtml(acc.username)}</span>
+              <span class="text-[10px] font-medium text-zinc-400 bg-zinc-800 px-2 py-0.5 rounded border border-zinc-700">Tersedia</span>
+            </div>
+            <div class="text-[11px] text-zinc-400 flex items-center gap-1.5">
+              <i data-lucide="user-check" class="w-3.5 h-3.5 text-indigo-400"></i>
+              <span>${acc.role || 'Admin'}</span>
+            </div>
+            <div class="pt-1">
+              <button type="button" data-switch-user="${escapeHtml(acc.username)}"
+                class="btn-switch-admin w-full py-1.5 rounded-lg bg-gradient-to-r from-indigo-500 to-blue-600 hover:from-indigo-400 hover:to-blue-500 text-white text-[11px] font-bold transition shadow cursor-pointer active:scale-98">
+                Beralih ke Akun Ini
+              </button>
+            </div>
+          </div>
+        `;
+      }
+    }).join('');
+
+    listEl.querySelectorAll('.btn-switch-admin').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const u = btn.getAttribute('data-switch-user');
+        if (!u) return;
+        pendingSwitchUsername = u;
+        const modal = document.getElementById('modalConfirmSwitchAdmin');
+        const userText = document.getElementById('confirmSwitchAdminUserText');
+        const passInput = document.getElementById('inputSwitchAdminPass');
+        const errText = document.getElementById('switchAdminError');
+        if (userText) userText.textContent = u;
+        if (passInput) passInput.value = '';
+        if (errText) errText.classList.add('hidden');
+        if (modal) modal.classList.remove('hidden');
+        if (passInput) passInput.focus();
+        lucide.createIcons();
+      });
+    });
+
+    lucide.createIcons();
   }
 
   function initSidebarAndSettings() {
@@ -1423,6 +1883,7 @@
 
     initAdminAccountManagement();
     renderAdminAccountsList();
+    renderSwitchAdminList();
   }
 
   function initSubTabs() {
@@ -1505,6 +1966,12 @@
     } else {
       selectFilterYear.value = 'ALL';
     }
+
+    const labelDropdownYear = document.getElementById('labelDropdownYear');
+    if (labelDropdownYear) {
+      const cur = selectFilterYear.options[selectFilterYear.selectedIndex];
+      labelDropdownYear.textContent = cur ? cur.textContent : 'Semua Tahun';
+    }
   }
 
   function populateDayFilter(year, month) {
@@ -1514,7 +1981,11 @@
     const prevVal = selectFilterDay.value;
     selectFilterDay.innerHTML = '<option value="ALL">Semua Tanggal</option>';
 
-    if (!month || month === 'ALL') return;
+    if (!month || month === 'ALL') {
+      const labelDropdownDay = document.getElementById('labelDropdownDay');
+      if (labelDropdownDay) labelDropdownDay.textContent = 'Semua Tanggal';
+      return;
+    }
 
     const y = (year && year !== 'ALL') ? parseInt(year, 10) : new Date().getFullYear();
     const m = parseInt(month, 10);
@@ -1533,6 +2004,221 @@
     } else {
       selectFilterDay.value = 'ALL';
     }
+
+    const labelDropdownDay = document.getElementById('labelDropdownDay');
+    if (labelDropdownDay) {
+      const cur = selectFilterDay.options[selectFilterDay.selectedIndex];
+      labelDropdownDay.textContent = cur ? cur.textContent : 'Semua Tanggal';
+    }
+  }
+
+  // Custom Downward Dropdown Controller (Task 1: downward direction, omit active choice, compact 2/6 column grid)
+  function initCustomDropdowns() {
+    const configs = [
+      {
+        type: 'year',
+        btnId: 'btnDropdownYear',
+        menuId: 'menuDropdownYear',
+        labelId: 'labelDropdownYear',
+        selectId: 'selectFilterYear',
+        getOptions: () => {
+          const sel = document.getElementById('selectFilterYear');
+          if (!sel) return [];
+          return Array.from(sel.options).map(o => ({ value: o.value, label: o.textContent }));
+        },
+        render: (menu, options, currentVal, onSelect) => {
+          const displayOpts = options.filter(o => o.value !== currentVal);
+          menu.innerHTML = `
+            <div class="py-1">
+              ${displayOpts.map(opt => `
+                <div class="px-3 py-1.5 text-xs text-zinc-200 hover:bg-indigo-600 hover:text-white cursor-pointer transition flex items-center justify-between" data-val="${opt.value}">
+                  <span>${escapeHtml(opt.label)}</span>
+                </div>
+              `).join('')}
+            </div>
+          `;
+          menu.querySelectorAll('[data-val]').forEach(item => {
+            item.addEventListener('click', (e) => {
+              e.stopPropagation();
+              onSelect(item.getAttribute('data-val'));
+            });
+          });
+        }
+      },
+      {
+        type: 'month',
+        btnId: 'btnDropdownMonth',
+        menuId: 'menuDropdownMonth',
+        labelId: 'labelDropdownMonth',
+        selectId: 'selectFilterMonth',
+        getOptions: () => [
+          { value: 'ALL', label: 'Semua Bulan' },
+          { value: '01', label: 'Januari' },
+          { value: '02', label: 'Februari' },
+          { value: '03', label: 'Maret' },
+          { value: '04', label: 'April' },
+          { value: '05', label: 'Mei' },
+          { value: '06', label: 'Juni' },
+          { value: '07', label: 'Juli' },
+          { value: '08', label: 'Agustus' },
+          { value: '09', label: 'September' },
+          { value: '10', label: 'Oktober' },
+          { value: '11', label: 'November' },
+          { value: '12', label: 'Desember' }
+        ],
+        render: (menu, options, currentVal, onSelect) => {
+          const isAllSelected = currentVal === 'ALL';
+          const monthOpts = options.filter(o => o.value !== 'ALL' && o.value !== currentVal);
+
+          let html = '';
+          if (!isAllSelected) {
+            html += `
+              <div class="w-full pb-1">
+                <button type="button" data-val="ALL"
+                  class="w-full py-1.5 px-3 rounded-lg bg-indigo-500/15 hover:bg-indigo-600 text-indigo-300 hover:text-white border border-indigo-500/25 font-bold text-xs transition cursor-pointer text-center">
+                  Semua Bulan
+                </button>
+              </div>
+            `;
+          }
+
+          html += `
+            <div class="grid grid-cols-2 gap-1 pt-0.5">
+              ${monthOpts.map(m => `
+                <button type="button" data-val="${m.value}"
+                  class="py-1.5 px-2 rounded-lg bg-white/5 hover:bg-indigo-600 hover:text-white text-zinc-300 text-xs font-medium transition cursor-pointer text-center truncate">
+                  ${m.label}
+                </button>
+              `).join('')}
+            </div>
+          `;
+          menu.innerHTML = html;
+          menu.querySelectorAll('[data-val]').forEach(item => {
+            item.addEventListener('click', (e) => {
+              e.stopPropagation();
+              onSelect(item.getAttribute('data-val'));
+            });
+          });
+        }
+      },
+      {
+        type: 'week',
+        btnId: 'btnDropdownWeek',
+        menuId: 'menuDropdownWeek',
+        labelId: 'labelDropdownWeek',
+        selectId: 'selectFilterWeek',
+        getOptions: () => [
+          { value: 'ALL', label: 'Semua Minggu' },
+          { value: 'W1', label: 'Minggu 1' },
+          { value: 'W2', label: 'Minggu 2' },
+          { value: 'W3', label: 'Minggu 3' },
+          { value: 'W4', label: 'Minggu 4' }
+        ],
+        render: (menu, options, currentVal, onSelect) => {
+          const displayOpts = options.filter(o => o.value !== currentVal);
+          menu.innerHTML = `
+            <div class="py-1">
+              ${displayOpts.map(opt => `
+                <div class="px-3 py-1.5 text-xs text-zinc-200 hover:bg-indigo-600 hover:text-white cursor-pointer transition flex items-center justify-between" data-val="${opt.value}">
+                  <span>${escapeHtml(opt.label)}</span>
+                </div>
+              `).join('')}
+            </div>
+          `;
+          menu.querySelectorAll('[data-val]').forEach(item => {
+            item.addEventListener('click', (e) => {
+              e.stopPropagation();
+              onSelect(item.getAttribute('data-val'));
+            });
+          });
+        }
+      },
+      {
+        type: 'day',
+        btnId: 'btnDropdownDay',
+        menuId: 'menuDropdownDay',
+        labelId: 'labelDropdownDay',
+        selectId: 'selectFilterDay',
+        getOptions: () => {
+          const sel = document.getElementById('selectFilterDay');
+          if (!sel) return [];
+          return Array.from(sel.options).map(o => ({ value: o.value, label: o.textContent }));
+        },
+        render: (menu, options, currentVal, onSelect) => {
+          const isAllSelected = currentVal === 'ALL';
+          const dayOpts = options.filter(o => o.value !== 'ALL' && o.value !== currentVal);
+
+          let html = '';
+          if (!isAllSelected) {
+            html += `
+              <div class="w-full pb-1">
+                <button type="button" data-val="ALL"
+                  class="w-full py-1.5 px-3 rounded-lg bg-indigo-500/15 hover:bg-indigo-600 text-indigo-300 hover:text-white border border-indigo-500/25 font-bold text-xs transition cursor-pointer text-center">
+                  Semua Tanggal
+                </button>
+              </div>
+            `;
+          }
+
+          html += `
+            <div class="grid grid-cols-6 gap-1 pt-0.5">
+              ${dayOpts.map(d => `
+                <button type="button" data-val="${d.value}"
+                  class="py-1 rounded bg-white/5 hover:bg-indigo-600 hover:text-white text-zinc-300 font-mono text-[11px] font-semibold transition cursor-pointer text-center">
+                  ${d.value}
+                </button>
+              `).join('')}
+            </div>
+          `;
+          menu.innerHTML = html;
+          menu.querySelectorAll('[data-val]').forEach(item => {
+            item.addEventListener('click', (e) => {
+              e.stopPropagation();
+              onSelect(item.getAttribute('data-val'));
+            });
+          });
+        }
+      }
+    ];
+
+    function closeAllMenus() {
+      configs.forEach(cfg => {
+        const menu = document.getElementById(cfg.menuId);
+        if (menu) menu.classList.add('hidden');
+      });
+    }
+
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('.filter-dropdown-group')) {
+        closeAllMenus();
+      }
+    });
+
+    configs.forEach(cfg => {
+      const btn = document.getElementById(cfg.btnId);
+      const menu = document.getElementById(cfg.menuId);
+      const label = document.getElementById(cfg.labelId);
+      const select = document.getElementById(cfg.selectId);
+      if (!btn || !menu || !label || !select) return;
+
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const willOpen = menu.classList.contains('hidden');
+        closeAllMenus();
+        if (willOpen) {
+          const currentVal = select.value || 'ALL';
+          const opts = cfg.getOptions();
+          cfg.render(menu, opts, currentVal, (chosenVal) => {
+            select.value = chosenVal;
+            const chosenOpt = opts.find(o => o.value === chosenVal);
+            label.textContent = chosenOpt ? chosenOpt.label : chosenVal;
+            menu.classList.add('hidden');
+            select.dispatchEvent(new Event('change'));
+          });
+          menu.classList.remove('hidden');
+        }
+      });
+    });
   }
 
   function initPeriodFilters() {
@@ -1549,6 +2235,7 @@
     const btnResetData = document.getElementById('btnResetData');
 
     populateYearFilter();
+    initCustomDropdowns();
 
     function updateMonthConditionalVisibility() {
       const monthVal = selectFilterMonth ? selectFilterMonth.value : 'ALL';
@@ -1563,6 +2250,10 @@
         if (containerFilterDay) containerFilterDay.classList.add('hidden');
         if (selectFilterWeek) selectFilterWeek.value = 'ALL';
         if (selectFilterDay) selectFilterDay.value = 'ALL';
+        const labelWeek = document.getElementById('labelDropdownWeek');
+        const labelDay = document.getElementById('labelDropdownDay');
+        if (labelWeek) labelWeek.textContent = 'Semua Minggu';
+        if (labelDay) labelDay.textContent = 'Semua Tanggal';
       }
     }
 
@@ -1608,6 +2299,14 @@
         if (selectFilterMonth) selectFilterMonth.value = 'ALL';
         if (selectFilterWeek) selectFilterWeek.value = 'ALL';
         if (selectFilterDay) selectFilterDay.value = 'ALL';
+        const labelYear = document.getElementById('labelDropdownYear');
+        const labelMonth = document.getElementById('labelDropdownMonth');
+        const labelWeek = document.getElementById('labelDropdownWeek');
+        const labelDay = document.getElementById('labelDropdownDay');
+        if (labelYear) labelYear.textContent = 'Semua Tahun';
+        if (labelMonth) labelMonth.textContent = 'Semua Bulan';
+        if (labelWeek) labelWeek.textContent = 'Semua Minggu';
+        if (labelDay) labelDay.textContent = 'Semua Tanggal';
         updateMonthConditionalVisibility();
         loadAttendanceData();
         showToast('Filter Direset', 'Semua filter dikembalikan ke Semua Waktu.');
@@ -1634,6 +2333,14 @@
         if (selectFilterMonth) selectFilterMonth.value = 'ALL';
         if (selectFilterWeek) selectFilterWeek.value = 'ALL';
         if (selectFilterDay) selectFilterDay.value = 'ALL';
+        const labelYear = document.getElementById('labelDropdownYear');
+        const labelMonth = document.getElementById('labelDropdownMonth');
+        const labelWeek = document.getElementById('labelDropdownWeek');
+        const labelDay = document.getElementById('labelDropdownDay');
+        if (labelYear) labelYear.textContent = 'Semua Tahun';
+        if (labelMonth) labelMonth.textContent = 'Semua Bulan';
+        if (labelWeek) labelWeek.textContent = 'Semua Minggu';
+        if (labelDay) labelDay.textContent = 'Semua Tanggal';
         updateMonthConditionalVisibility();
         loadAttendanceData();
         showToast('Data Direset', 'Seluruh data absensi telah dikosongkan.');
@@ -1642,30 +2349,20 @@
   }
 
   // --- 7. LOAD ATTENDANCE DATA & COMPREHENSIVE FILTER ENGINE ---
-  function loadAttendanceData() {
-    const attendanceTableHead = document.getElementById('attendanceTableHead');
-    const attendanceTableBody = document.getElementById('attendanceTableBody');
-    const metricFilteredCount = document.getElementById('metricFilteredCount');
-    const metricMasukCount = document.getElementById('metricMasukCount');
-    const metricKeluarCount = document.getElementById('metricKeluarCount');
-    const metricTotalAllTime = document.getElementById('metricTotalAllTime');
-
+  function getFilteredAttendanceRecords() {
+    const all = getStoredAttendances();
     const selectFilterYear = document.getElementById('selectFilterYear');
     const selectFilterMonth = document.getElementById('selectFilterMonth');
     const selectFilterWeek = document.getElementById('selectFilterWeek');
     const selectFilterDay = document.getElementById('selectFilterDay');
     const filterSearch = document.getElementById('filterSearch');
 
-    if (!attendanceTableBody) return;
-
-    const all = getStoredAttendances();
     const selectedYear = selectFilterYear ? selectFilterYear.value : 'ALL';
     const selectedMonth = selectFilterMonth ? selectFilterMonth.value : 'ALL';
     const selectedWeek = (selectFilterWeek && selectFilterMonth && selectFilterMonth.value !== 'ALL') ? selectFilterWeek.value : 'ALL';
     const selectedDay = (selectFilterDay && selectFilterMonth && selectFilterMonth.value !== 'ALL') ? selectFilterDay.value : 'ALL';
     const searchTerm = filterSearch ? filterSearch.value.trim().toLowerCase() : '';
 
-    // Apply combined filters (Strictly starting from August 2026)
     const filtered = all.filter(item => {
       // Data before August 2026 is strictly excluded
       if (item.date && item.date < '2026-08-01') return false;
@@ -1708,6 +2405,28 @@
 
       return true;
     });
+
+    return {
+      filtered,
+      selectedYear,
+      selectedMonth,
+      selectedWeek,
+      selectedDay,
+      searchTerm
+    };
+  }
+
+  function loadAttendanceData() {
+    const attendanceTableHead = document.getElementById('attendanceTableHead');
+    const attendanceTableBody = document.getElementById('attendanceTableBody');
+    const metricFilteredCount = document.getElementById('metricFilteredCount');
+    const metricMasukCount = document.getElementById('metricMasukCount');
+    const metricKeluarCount = document.getElementById('metricKeluarCount');
+    const metricTotalAllTime = document.getElementById('metricTotalAllTime');
+
+    if (!attendanceTableBody) return;
+
+    const { filtered } = getFilteredAttendanceRecords();
 
     // Update Metrics (Requirement 8)
     const masukCount = filtered.filter(a => a.type === 'MASUK' || !a.type).length;
@@ -1854,20 +2573,40 @@
     }
   }
 
-  // --- CSV EXPORT ---
+  // --- CSV EXPORT (Task 2: rapi, sesuai kategori dan filter aktif) ---
   function exportCsvData() {
-    const all = getStoredAttendances();
-    if (all.length === 0) {
-      alert('Belum ada data absensi untuk diekspor.');
+    const { filtered, selectedYear, selectedMonth, selectedWeek, selectedDay, searchTerm } = getFilteredAttendanceRecords();
+
+    if (filtered.length === 0) {
+      alert('Tidak ada data absensi yang sesuai dengan filter saat ini untuk diekspor.');
       return;
     }
 
-    const dateStr = getLocalDateString(new Date());
+    const now = new Date();
+    const dateStr = getLocalDateString(now);
+    const exportTime = `${getIndonesianDayName(now)}, ${now.getDate()} ${getIndonesianMonthName(now.getMonth())} ${now.getFullYear()} - ${now.toLocaleTimeString('id-ID', { hour12: false })} WIB`;
+    const catLabel = activeSubTab === 'UTAMA' ? 'Absensi Utama (Rekap Terpadu Masuk & Keluar)' : (activeSubTab === 'MASUK' ? 'Absensi Masuk' : 'Absensi Keluar');
+    const yearLabel = selectedYear === 'ALL' ? 'Semua Tahun' : `Tahun ${selectedYear}`;
+    const monthLabel = selectedMonth === 'ALL' ? 'Semua Bulan' : getIndonesianMonthName(parseInt(selectedMonth, 10) - 1);
+    const weekLabel = selectedWeek === 'ALL' ? 'Semua Minggu' : `Minggu ${selectedWeek.replace('W', '')}`;
+    const dayLabel = selectedDay === 'ALL' ? 'Semua Tanggal' : `Tanggal ${selectedDay}`;
+
+    const lines = [];
+    // Report Header Metadata Block
+    lines.push(['"LAPORAN REKAPITULASI DATA ABSENSI"']);
+    lines.push(['"Kategori Laporan"', `"${catLabel}"`]);
+    lines.push(['"Filter Tahun"', `"${yearLabel}"`]);
+    lines.push(['"Filter Bulan"', `"${monthLabel}"`]);
+    lines.push(['"Filter Minggu"', `"${weekLabel}"`]);
+    lines.push(['"Filter Tanggal"', `"${dayLabel}"`]);
+    lines.push(['"Kata Kunci Pencarian"', `"${searchTerm || '-'}"`]);
+    lines.push(['"Waktu Ekspor"', `"${exportTime}"`]);
+    lines.push(['"Total Data Terfilter"', `"${filtered.length} Baris"`]);
+    lines.push(['""']); // Spacer
 
     if (activeSubTab === 'UTAMA') {
-      const headers = ['No', 'Nama Lengkap', 'Hari', 'Tanggal', 'Jam Masuk', 'Jam Keluar', 'Status', 'Device ID', 'Device Info'];
       const groupMap = new Map();
-      all.forEach(rec => {
+      filtered.forEach(rec => {
         const key = `${rec.device_id}_${rec.date}`;
         if (!groupMap.has(key)) {
           groupMap.set(key, {
@@ -1885,39 +2624,46 @@
         else item.masuk = rec;
       });
 
-      const rows = Array.from(groupMap.values()).map((p, idx) => [
-        idx + 1,
-        `"${p.name.replace(/"/g, '""')}"`,
-        `"${p.day}"`,
-        `"${p.date}"`,
-        `"${p.masuk ? p.masuk.time : '-'}"`,
-        `"${p.keluar ? p.keluar.time : '-'}"`,
-        `"${(p.masuk && p.keluar) ? 'LENGKAP' : (p.masuk ? 'BELUM KELUAR' : 'HANYA KELUAR')}"`,
-        `"${p.device_id}"`,
-        `"${(p.device_info || '').replace(/"/g, '""')}"`
-      ]);
-      downloadCsv(headers, rows, `Rekap_Absensi_Utama_${dateStr}.csv`);
+      const paired = Array.from(groupMap.values());
+      lines.push(['"No"', '"Nama Lengkap"', '"Hari"', '"Tanggal"', '"Jam Masuk"', '"Jam Keluar"', '"Status Kehadiran"', '"ID Perangkat"', '"Info Perangkat"']);
+      paired.forEach((p, idx) => {
+        const statusStr = (p.masuk && p.keluar) ? 'LENGKAP' : (p.masuk ? 'BELUM KELUAR' : 'HANYA KELUAR');
+        lines.push([
+          idx + 1,
+          `"${(p.name || '').replace(/"/g, '""')}"`,
+          `"${p.day || ''}"`,
+          `"${p.date || ''}"`,
+          `"${p.masuk ? p.masuk.time + ' WIB' : '-'}"`,
+          `"${p.keluar ? p.keluar.time + ' WIB' : '-'}"`,
+          `"${statusStr}"`,
+          `"${(p.device_id || '').replace(/"/g, '""')}"`,
+          `"${(p.device_info || '').replace(/"/g, '""')}"`
+        ]);
+      });
+      downloadCsv(lines, `Rekap_Absensi_Utama_${dateStr}.csv`);
     } else {
-      const typeFilter = activeSubTab;
-      const filtered = all.filter(a => typeFilter === 'KELUAR' ? a.type === 'KELUAR' : (a.type === 'MASUK' || !a.type));
-      const headers = ['No', 'Tipe Absen', 'Nama Lengkap', 'Hari', 'Tanggal', 'Jam', 'Token QR', 'Device ID', 'Device Info'];
-      const rows = filtered.map((att, idx) => [
-        idx + 1,
-        `"${att.type || 'MASUK'}"`,
-        `"${att.name.replace(/"/g, '""')}"`,
-        `"${att.day}"`,
-        `"${att.date}"`,
-        `"${att.time}"`,
-        `"${att.token}"`,
-        `"${att.device_id}"`,
-        `"${(att.device_info || '').replace(/"/g, '""')}"`
-      ]);
-      downloadCsv(headers, rows, `Rekap_Absensi_${typeFilter}_${dateStr}.csv`);
+      const isKel = activeSubTab === 'KELUAR';
+      const records = filtered.filter(a => isKel ? a.type === 'KELUAR' : (a.type === 'MASUK' || !a.type));
+      lines.push(['"No"', '"Tipe Absen"', '"Nama Lengkap"', '"Hari"', '"Tanggal"', '"Jam"', '"Token QR"', '"ID Perangkat"', '"Info Perangkat"']);
+      records.forEach((a, idx) => {
+        lines.push([
+          idx + 1,
+          `"${a.type || 'MASUK'}"`,
+          `"${(a.name || '').replace(/"/g, '""')}"`,
+          `"${a.day || ''}"`,
+          `"${a.date || ''}"`,
+          `"${a.time || ''} WIB"`,
+          `"${(a.token || '').replace(/"/g, '""')}"`,
+          `"${(a.device_id || '').replace(/"/g, '""')}"`,
+          `"${(a.device_info || '').replace(/"/g, '""')}"`
+        ]);
+      });
+      downloadCsv(lines, `Rekap_Absensi_${activeSubTab}_${dateStr}.csv`);
     }
   }
 
-  function downloadCsv(headers, rows, filename) {
-    const csvContent = '\uFEFF' + [headers.join(','), ...rows.map(r => r.join(','))].join('\r\n');
+  function downloadCsv(lines, filename) {
+    const csvContent = '\uFEFF' + lines.map(row => row.join(',')).join('\r\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);

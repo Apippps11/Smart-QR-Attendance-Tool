@@ -329,7 +329,6 @@
       <!-- Title & Subtitle -->
       <div class="space-y-1.5 relative">
         <h2 class="text-2xl sm:text-[25px] font-extrabold text-white tracking-tight">Web Absensi Kehadiran</h2>
-        <div class="text-xs sm:text-sm font-semibold text-indigo-400">Web absen berbasis QR</div>
         <p class="text-[11px] sm:text-xs text-zinc-400 max-w-sm mx-auto leading-normal whitespace-nowrap">Pilih menu untuk melanjutkan proses absensi atau administrasi sistem</p>
       </div>
 
@@ -854,6 +853,182 @@
 
 
   <!-- ======================================================== -->
+  <!-- MODAL: KONFIRMASI PEMBUATAN ADMIN BARU (TASK 4)          -->
+  <!-- ======================================================== -->
+  <div id="modalConfirmAddAdmin" class="hidden fixed inset-0 z-50 bg-[#090b10]/92 backdrop-blur-md flex items-center justify-center p-4">
+    <div class="pixel-box rounded-2xl p-6 sm:p-7 max-w-sm w-full space-y-4 text-center relative overflow-hidden">
+      <div class="pixel-corner-tl"></div><div class="pixel-corner-tr"></div>
+      <div class="pixel-corner-bl"></div><div class="pixel-corner-br"></div>
+
+      <div class="w-12 h-12 rounded-xl bg-indigo-500/15 border border-indigo-500/30 text-indigo-400 mx-auto flex items-center justify-center shadow-lg shadow-indigo-500/15">
+        <i data-lucide="user-check" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <h4 class="text-sm font-bold text-white tracking-tight">Konfirmasi Pembuatan Admin</h4>
+        <p class="text-[11px] text-zinc-400 mt-1">
+          Ketik ulang password untuk akun <span id="confirmAddAdminUserText" class="font-mono font-bold text-indigo-300">...</span>:
+        </p>
+      </div>
+
+      <form id="formConfirmAddAdmin" class="space-y-3 pt-1">
+        <div class="relative text-left">
+          <input type="password" id="inputConfirmAddAdminPass" placeholder="Ketik ulang password..." required
+            class="w-full pl-3 pr-9 py-2.5 bg-[#161a28] border border-white/10 rounded-xl text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-indigo-500 font-mono">
+          <button type="button" id="btnToggleConfirmAddAdminPass" title="Lihat Password" class="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-white transition cursor-pointer p-1">
+            <i id="eyeConfirmAddOpen" data-lucide="eye" class="w-3.5 h-3.5"></i>
+            <i id="eyeConfirmAddClosed" data-lucide="eye-off" class="w-3.5 h-3.5 hidden"></i>
+          </button>
+        </div>
+        <p id="confirmAddAdminError" class="text-[11px] text-rose-400 hidden font-medium text-left">Password konfirmasi tidak cocok!</p>
+
+        <div class="flex gap-2 pt-1">
+          <button type="button" id="btnCancelConfirmAddAdmin"
+            class="w-1/3 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 text-xs font-semibold transition cursor-pointer">
+            Batal
+          </button>
+          <button type="submit"
+            class="w-2/3 py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-blue-600 hover:from-indigo-400 hover:to-blue-500 text-white font-bold text-xs transition shadow cursor-pointer active:scale-98">
+            Buat & Aktifkan
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+
+  <!-- ======================================================== -->
+  <!-- MODAL: KONFIRMASI HAPUS AKUN ADMIN (TASK 6)              -->
+  <!-- ======================================================== -->
+  <div id="modalConfirmDeleteAdmin" class="hidden fixed inset-0 z-50 bg-[#090b10]/92 backdrop-blur-md flex items-center justify-center p-4">
+    <div class="pixel-box rounded-2xl p-6 sm:p-7 max-w-sm w-full space-y-4 text-center relative overflow-hidden">
+      <div class="pixel-corner-tl"></div><div class="pixel-corner-tr"></div>
+      <div class="pixel-corner-bl"></div><div class="pixel-corner-br"></div>
+
+      <div class="w-12 h-12 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-400 mx-auto flex items-center justify-center shadow-lg shadow-rose-500/15">
+        <i data-lucide="shield-alert" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <h4 class="text-sm font-bold text-white tracking-tight">Konfirmasi Hapus Akun Admin</h4>
+        <p class="text-[11px] text-zinc-400 mt-1">
+          Masukkan password akun <span id="confirmDeleteAdminUserText" class="font-mono font-bold text-rose-400">...</span> untuk menghapus permanen:
+        </p>
+      </div>
+
+      <form id="formConfirmDeleteAdmin" class="space-y-3 pt-1">
+        <div class="relative text-left">
+          <input type="password" id="inputDeleteAdminPass" placeholder="Password akun yang akan dihapus..." required
+            class="w-full pl-3 pr-9 py-2.5 bg-[#161a28] border border-white/10 rounded-xl text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-rose-500 font-mono">
+          <button type="button" id="btnToggleDeleteAdminPass" title="Lihat Password" class="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-white transition cursor-pointer p-1">
+            <i id="eyeDeleteAdminOpen" data-lucide="eye" class="w-3.5 h-3.5"></i>
+            <i id="eyeDeleteAdminClosed" data-lucide="eye-off" class="w-3.5 h-3.5 hidden"></i>
+          </button>
+        </div>
+        <p id="deleteAdminError" class="text-[11px] text-rose-400 hidden font-medium text-left">Password salah! Akun tidak dapat dihapus.</p>
+
+        <div class="flex gap-2 pt-1">
+          <button type="button" id="btnCancelDeleteAdmin"
+            class="w-1/3 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 text-xs font-semibold transition cursor-pointer">
+            Batal
+          </button>
+          <button type="submit"
+            class="w-2/3 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs transition shadow cursor-pointer active:scale-98">
+            Hapus Permanen
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+
+  <!-- ======================================================== -->
+  <!-- MODAL: GANTI AKUN ADMIN (TASK 4 & TASK 8)                -->
+  <!-- ======================================================== -->
+  <div id="modalConfirmSwitchAdmin" class="hidden fixed inset-0 z-50 bg-[#090b10]/92 backdrop-blur-md flex items-center justify-center p-4">
+    <div class="pixel-box rounded-2xl p-6 sm:p-7 max-w-sm w-full space-y-4 text-center relative overflow-hidden">
+      <div class="pixel-corner-tl"></div><div class="pixel-corner-tr"></div>
+      <div class="pixel-corner-bl"></div><div class="pixel-corner-br"></div>
+
+      <div class="w-12 h-12 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 mx-auto flex items-center justify-center shadow-lg shadow-emerald-500/15">
+        <i data-lucide="repeat" class="w-6 h-6"></i>
+      </div>
+      <div>
+        <h4 class="text-sm font-bold text-white tracking-tight">Ganti Akun Admin</h4>
+        <p class="text-[11px] text-zinc-400 mt-1">
+          Masukkan password akun <span id="confirmSwitchAdminUserText" class="font-mono font-bold text-emerald-400">...</span> untuk beralih sesi:
+        </p>
+      </div>
+
+      <form id="formConfirmSwitchAdmin" class="space-y-3 pt-1">
+        <div class="relative text-left">
+          <input type="password" id="inputSwitchAdminPass" placeholder="Password akun tujuan..." required
+            class="w-full pl-3 pr-9 py-2.5 bg-[#161a28] border border-white/10 rounded-xl text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-emerald-500 font-mono">
+          <button type="button" id="btnToggleSwitchAdminPass" title="Lihat Password" class="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-white transition cursor-pointer p-1">
+            <i id="eyeSwitchAdminOpen" data-lucide="eye" class="w-3.5 h-3.5"></i>
+            <i id="eyeSwitchAdminClosed" data-lucide="eye-off" class="w-3.5 h-3.5 hidden"></i>
+          </button>
+        </div>
+        <p id="switchAdminError" class="text-[11px] text-rose-400 hidden font-medium text-left">Password salah! Gagal beralih akun.</p>
+
+        <div class="flex gap-2 pt-1">
+          <button type="button" id="btnCancelSwitchAdmin"
+            class="w-1/3 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 text-xs font-semibold transition cursor-pointer">
+            Batal
+          </button>
+          <button type="submit"
+            class="w-2/3 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-bold text-xs transition shadow cursor-pointer active:scale-98">
+            Beralih Akun
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+
+  <!-- ======================================================== -->
+  <!-- MODAL: PERINGATAN QR TIDAK SESUAI (TASK 9)               -->
+  <!-- ======================================================== -->
+  <div id="modalWrongQrType" class="hidden fixed inset-0 z-50 bg-[#090b10]/92 backdrop-blur-md flex items-center justify-center p-4">
+    <div class="pixel-box rounded-2xl p-6 sm:p-7 max-w-sm w-full space-y-4 text-center relative overflow-hidden">
+      <div class="pixel-corner-tl"></div><div class="pixel-corner-tr"></div>
+      <div class="pixel-corner-bl"></div><div class="pixel-corner-br"></div>
+
+      <div class="w-14 h-14 rounded-2xl bg-rose-500/15 border border-rose-500/30 text-rose-400 mx-auto flex items-center justify-center shadow-lg shadow-rose-500/20">
+        <i data-lucide="alert-triangle" class="w-7 h-7"></i>
+      </div>
+
+      <div class="space-y-1.5">
+        <h4 class="text-base font-bold text-white tracking-tight">QR Code Tidak Sesuai!</h4>
+        <p id="wrongQrTypeMessage" class="text-xs text-zinc-300 leading-relaxed">
+          Anda sedang berada di menu Absensi Masuk, namun QR Code yang Anda scan adalah QR Absensi Keluar.
+        </p>
+      </div>
+
+      <div class="p-3 rounded-xl bg-[#161a28] border border-white/10 text-left space-y-1.5 text-xs">
+        <div class="flex justify-between">
+          <span class="text-zinc-400">Menu Aktif:</span>
+          <span id="wrongQrExpectedType" class="font-bold text-emerald-400">ABSENSI MASUK</span>
+        </div>
+        <div class="flex justify-between">
+          <span class="text-zinc-400">QR Terdeteksi:</span>
+          <span id="wrongQrScannedType" class="font-bold text-rose-400">ABSENSI KELUAR</span>
+        </div>
+      </div>
+
+      <div class="flex gap-2.5 pt-1">
+        <button type="button" id="btnReturnWrongQr"
+          class="w-1/2 py-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 text-xs font-semibold transition cursor-pointer">
+          Kembali ke Menu
+        </button>
+        <button type="button" id="btnRescanWrongQr"
+          class="w-1/2 py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-blue-600 hover:from-indigo-400 hover:to-blue-500 text-white font-bold text-xs transition shadow cursor-pointer active:scale-98">
+          Scan Ulang
+        </button>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ======================================================== -->
   <!-- MAIN ADMIN DASHBOARD (HARD LOCKED BY DEFAULT)            -->
   <!-- ======================================================== -->
   <div id="adminDashboardWrapper" class="locked hidden flex-1 flex flex-col">
@@ -992,7 +1167,6 @@
             </div>
             <div>
               <h2 class="text-sm font-bold text-white tracking-tight">QR Panel (One Time QR)</h2>
-              <p class="text-[11px] text-zinc-400">Pemisahan QR Absensi Masuk & Keluar &bull; Setiap QR hanya berlaku 1 kali scan</p>
             </div>
           </div>
         </div>
@@ -1199,54 +1373,87 @@
             </div>
           </div>
 
-          <!-- Second Bar: Dropdown Periode (Rapi & Kompak) -->
+          <!-- Second Bar: Dropdown Periode (Selalu Membuka ke Bawah) -->
           <div class="flex flex-wrap items-center gap-3 pt-1">
             <!-- Filter Tahun Dropdown -->
-            <div class="flex items-center gap-2 min-w-[130px]">
+            <div class="flex items-center gap-2 min-w-[130px] relative filter-dropdown-group" id="groupFilterYear">
               <span class="text-xs text-zinc-400 font-semibold whitespace-nowrap">Tahun:</span>
-              <select id="selectFilterYear" class="w-full px-3 py-2 bg-[#161a28] border border-white/10 rounded-xl text-xs text-zinc-200 focus:outline-none focus:border-indigo-500 font-medium cursor-pointer">
-                <option value="ALL">Semua Tahun</option>
-              </select>
+              <div class="relative w-full">
+                <button id="btnDropdownYear" type="button" class="w-full px-3 py-2 bg-[#161a28] border border-white/10 rounded-xl text-xs text-zinc-200 focus:outline-none focus:border-indigo-500 font-medium cursor-pointer flex items-center justify-between gap-2 shadow-sm">
+                  <span id="labelDropdownYear" class="truncate">Semua Tahun</span>
+                  <i data-lucide="chevron-down" class="w-3.5 h-3.5 text-zinc-400 shrink-0 transition-transform"></i>
+                </button>
+                <div id="menuDropdownYear" class="hidden absolute top-full left-0 mt-1.5 w-full min-w-[140px] bg-[#161a28] border border-white/10 rounded-xl shadow-2xl py-1 z-50 max-h-56 overflow-y-auto">
+                  <div class="px-3 py-1.5 text-xs text-zinc-200 hover:bg-indigo-600 hover:text-white cursor-pointer transition flex items-center justify-between" data-value="ALL"><span>Semua Tahun</span></div>
+                </div>
+                <select id="selectFilterYear" class="hidden">
+                  <option value="ALL">Semua Tahun</option>
+                </select>
+              </div>
             </div>
 
             <!-- Filter Bulan Dropdown -->
-            <div class="flex items-center gap-2 min-w-[140px]">
+            <div class="flex items-center gap-2 min-w-[140px] relative filter-dropdown-group" id="groupFilterMonth">
               <span class="text-xs text-zinc-400 font-semibold whitespace-nowrap">Bulan:</span>
-              <select id="selectFilterMonth" class="w-full px-3 py-2 bg-[#161a28] border border-white/10 rounded-xl text-xs text-zinc-200 focus:outline-none focus:border-indigo-500 font-medium cursor-pointer">
-                <option value="ALL">Semua Bulan</option>
-                <option value="01">Januari</option>
-                <option value="02">Februari</option>
-                <option value="03">Maret</option>
-                <option value="04">April</option>
-                <option value="05">Mei</option>
-                <option value="06">Juni</option>
-                <option value="07">Juli</option>
-                <option value="08">Agustus</option>
-                <option value="09">September</option>
-                <option value="10">Oktober</option>
-                <option value="11">November</option>
-                <option value="12">Desember</option>
-              </select>
+              <div class="relative w-full">
+                <button id="btnDropdownMonth" type="button" class="w-full px-3 py-2 bg-[#161a28] border border-white/10 rounded-xl text-xs text-zinc-200 focus:outline-none focus:border-indigo-500 font-medium cursor-pointer flex items-center justify-between gap-2 shadow-sm">
+                  <span id="labelDropdownMonth" class="truncate">Semua Bulan</span>
+                  <i data-lucide="chevron-down" class="w-3.5 h-3.5 text-zinc-400 shrink-0 transition-transform"></i>
+                </button>
+                <div id="menuDropdownMonth" class="hidden absolute top-full left-0 mt-1.5 min-w-[210px] bg-[#161a28] border border-white/10 rounded-xl shadow-2xl p-1.5 z-50 max-h-64 overflow-y-auto">
+                </div>
+                <select id="selectFilterMonth" class="hidden">
+                  <option value="ALL">Semua Bulan</option>
+                  <option value="01">Januari</option>
+                  <option value="02">Februari</option>
+                  <option value="03">Maret</option>
+                  <option value="04">April</option>
+                  <option value="05">Mei</option>
+                  <option value="06">Juni</option>
+                  <option value="07">Juli</option>
+                  <option value="08">Agustus</option>
+                  <option value="09">September</option>
+                  <option value="10">Oktober</option>
+                  <option value="11">November</option>
+                  <option value="12">Desember</option>
+                </select>
+              </div>
             </div>
 
             <!-- Filter Minggu Dropdown (Muncul HANYA KETIKA KATEGORI BULAN DIKLIK/DIPILIH) -->
-            <div id="containerFilterWeek" class="hidden flex items-center gap-2 min-w-[130px] transition-all">
+            <div id="containerFilterWeek" class="hidden flex items-center gap-2 min-w-[130px] relative filter-dropdown-group">
               <span class="text-xs text-zinc-400 font-semibold whitespace-nowrap">Minggu:</span>
-              <select id="selectFilterWeek" class="w-full px-3 py-2 bg-[#161a28] border border-white/10 rounded-xl text-xs text-zinc-200 focus:outline-none focus:border-indigo-500 font-medium cursor-pointer">
-                <option value="ALL">Semua Minggu</option>
-                <option value="W1">Minggu 1</option>
-                <option value="W2">Minggu 2</option>
-                <option value="W3">Minggu 3</option>
-                <option value="W4">Minggu 4</option>
-              </select>
+              <div class="relative w-full">
+                <button id="btnDropdownWeek" type="button" class="w-full px-3 py-2 bg-[#161a28] border border-white/10 rounded-xl text-xs text-zinc-200 focus:outline-none focus:border-indigo-500 font-medium cursor-pointer flex items-center justify-between gap-2 shadow-sm">
+                  <span id="labelDropdownWeek" class="truncate">Semua Minggu</span>
+                  <i data-lucide="chevron-down" class="w-3.5 h-3.5 text-zinc-400 shrink-0 transition-transform"></i>
+                </button>
+                <div id="menuDropdownWeek" class="hidden absolute top-full left-0 mt-1.5 w-full min-w-[140px] bg-[#161a28] border border-white/10 rounded-xl shadow-2xl py-1 z-50 max-h-56 overflow-y-auto">
+                </div>
+                <select id="selectFilterWeek" class="hidden">
+                  <option value="ALL">Semua Minggu</option>
+                  <option value="W1">Minggu 1</option>
+                  <option value="W2">Minggu 2</option>
+                  <option value="W3">Minggu 3</option>
+                  <option value="W4">Minggu 4</option>
+                </select>
+              </div>
             </div>
 
             <!-- Filter Tanggal Dropdown (Muncul HANYA KETIKA KATEGORI BULAN DIKLIK/DIPILIH) -->
-            <div id="containerFilterDay" class="hidden flex items-center gap-2 min-w-[130px] transition-all">
+            <div id="containerFilterDay" class="hidden flex items-center gap-2 min-w-[130px] relative filter-dropdown-group">
               <span class="text-xs text-zinc-400 font-semibold whitespace-nowrap">Tanggal:</span>
-              <select id="selectFilterDay" class="w-full px-3 py-2 bg-[#161a28] border border-white/10 rounded-xl text-xs text-zinc-200 focus:outline-none focus:border-indigo-500 font-medium cursor-pointer">
-                <option value="ALL">Semua Tanggal</option>
-              </select>
+              <div class="relative w-full">
+                <button id="btnDropdownDay" type="button" class="w-full px-3 py-2 bg-[#161a28] border border-white/10 rounded-xl text-xs text-zinc-200 focus:outline-none focus:border-indigo-500 font-medium cursor-pointer flex items-center justify-between gap-2 shadow-sm">
+                  <span id="labelDropdownDay" class="truncate">Semua Tanggal</span>
+                  <i data-lucide="chevron-down" class="w-3.5 h-3.5 text-zinc-400 shrink-0 transition-transform"></i>
+                </button>
+                <div id="menuDropdownDay" class="hidden absolute top-full left-0 mt-1.5 min-w-[260px] bg-[#161a28] border border-white/10 rounded-xl shadow-2xl p-1.5 z-50 max-h-64 overflow-y-auto">
+                </div>
+                <select id="selectFilterDay" class="hidden">
+                  <option value="ALL">Semua Tanggal</option>
+                </select>
+              </div>
             </div>
           </div>
 
@@ -1356,8 +1563,14 @@
                 </div>
                 <div>
                   <label class="block text-[10px] text-zinc-400 mb-1">Password</label>
-                  <input type="password" id="newAdminPass" placeholder="Password..." required
-                    class="w-full px-3 py-2 bg-[#161a28] border border-white/10 rounded-lg text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-indigo-500 font-mono">
+                  <div class="relative">
+                    <input type="password" id="newAdminPass" placeholder="Password..." required
+                      class="w-full pl-3 pr-9 py-2 bg-[#161a28] border border-white/10 rounded-lg text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-indigo-500 font-mono">
+                    <button type="button" id="btnToggleNewAdminPass" title="Lihat Password" class="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-white transition cursor-pointer p-1">
+                      <i id="eyeNewAdminOpen" data-lucide="eye" class="w-3.5 h-3.5"></i>
+                      <i id="eyeNewAdminClosed" data-lucide="eye-off" class="w-3.5 h-3.5 hidden"></i>
+                    </button>
+                  </div>
                 </div>
               </div>
               <button type="submit"
@@ -1370,9 +1583,29 @@
             <!-- Daftar Admin Terdaftar -->
             <div class="space-y-2 pt-1">
               <div class="text-xs font-semibold text-zinc-400">Daftar Akun Admin Aktif:</div>
-              <div id="adminAccountsList" class="space-y-1.5 max-h-[140px] overflow-y-auto pr-1">
+              <div id="adminAccountsList" class="space-y-2 max-h-[160px] overflow-y-auto pr-1">
                 <!-- Dynamically populated in admin.js -->
               </div>
+            </div>
+          </div>
+
+          <!-- Card 3: Ganti Akun Admin -->
+          <div class="bg-[#121624] border border-white/10 rounded-2xl p-5 space-y-4 shadow-lg shadow-black/30 md:col-span-2">
+            <div class="flex items-center justify-between border-b border-white/[0.06] pb-3">
+              <h3 class="text-sm font-bold text-white flex items-center gap-2">
+                <i data-lucide="repeat" class="w-4 h-4 text-indigo-400"></i>
+                <span>Ganti Akun Admin</span>
+              </h3>
+              <div class="flex items-center gap-2 text-xs">
+                <span class="text-zinc-400">Sedang Login:</span>
+                <span id="currentAdminBadge" class="font-bold font-mono px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">...</span>
+              </div>
+            </div>
+            <p class="text-xs text-zinc-400 leading-relaxed">
+              Beralih ke akun admin lain tanpa harus logout terlebih dahulu. Akun yang sedang aktif digunakan pada perangkat lain tidak dapat dipilih.
+            </p>
+            <div id="switchAdminList" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pt-1">
+              <!-- Dynamically populated in admin.js -->
             </div>
           </div>
         </div>
