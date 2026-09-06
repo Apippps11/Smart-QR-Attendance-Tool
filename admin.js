@@ -251,16 +251,16 @@
   function handleAdminLogout() {
     if (confirm('Keluar dari sesi admin (Log Out)?')) {
       try {
+        const accounts = getAdminAccounts();
         const currentUsername = sessionStorage.getItem('sqr_admin_username');
-        if (currentUsername) {
-          const accounts = getAdminAccounts();
-          const me = accounts.find(a => a.username.toLowerCase() === currentUsername.toLowerCase());
-          if (me) {
-            me.isOnline = false;
-            me.activeDeviceId = null;
-            saveAdminAccounts(accounts);
+        const currentDev = window.DeviceFingerprint ? window.DeviceFingerprint.getDeviceInfo() : { deviceId: 'dev_local', deviceInfo: 'Perangkat Ini' };
+        accounts.forEach(a => {
+          if ((currentUsername && a.username.trim().toLowerCase() === currentUsername.trim().toLowerCase()) || (a.activeDeviceId === currentDev.deviceId)) {
+            a.isOnline = false;
+            a.activeDeviceId = null;
           }
-        }
+        });
+        saveAdminAccounts(accounts);
         sessionStorage.removeItem(STORAGE_AUTH);
         sessionStorage.removeItem('sqr_admin_username');
       } catch (err) {}
@@ -289,6 +289,39 @@
     let isAuth = false;
     try {
       isAuth = sessionStorage.getItem(STORAGE_AUTH) === 'true';
+      if (isAuth) {
+        // Validate active admin username against existing accounts
+        const currentSessionUser = sessionStorage.getItem('sqr_admin_username');
+        const accounts = getAdminAccounts();
+        const matchedAccount = accounts.find(a => currentSessionUser && a.username.trim().toLowerCase() === currentSessionUser.trim().toLowerCase());
+        
+        if (!matchedAccount) {
+          // Account doesn't exist anymore (e.g. account was deleted) -> immediately invalidate session
+          sessionStorage.removeItem(STORAGE_AUTH);
+          sessionStorage.removeItem('sqr_admin_username');
+          isAuth = false;
+        } else {
+          // Ensure this account is recognized as online on current device and other accounts on this device are offline
+          const currentDev = window.DeviceFingerprint ? window.DeviceFingerprint.getDeviceInfo() : { deviceId: 'dev_local', deviceInfo: 'Perangkat Ini' };
+          let stateChanged = false;
+          if (!matchedAccount.isOnline || matchedAccount.activeDeviceId !== currentDev.deviceId) {
+            matchedAccount.isOnline = true;
+            matchedAccount.activeDeviceId = currentDev.deviceId;
+            matchedAccount.deviceInfo = currentDev.deviceInfo;
+            stateChanged = true;
+          }
+          accounts.forEach(a => {
+            if (a.username.trim().toLowerCase() !== matchedAccount.username.trim().toLowerCase() && a.activeDeviceId === currentDev.deviceId) {
+              a.isOnline = false;
+              a.activeDeviceId = null;
+              stateChanged = true;
+            }
+          });
+          if (stateChanged) {
+            saveAdminAccounts(accounts);
+          }
+        }
+      }
     } catch (e) {
       isAuth = false;
     }
@@ -322,6 +355,15 @@
   // Anti-Bypass for iOS Safari & Firefox (Back-Forward Cache / BFCache)
   window.addEventListener('pageshow', () => {
     checkAuthStatus();
+  });
+
+  // Cross-tab storage change sync
+  window.addEventListener('storage', (e) => {
+    if (e.key === STORAGE_ADMIN_ACCOUNTS) {
+      checkAuthStatus();
+      renderAdminAccountsList();
+      renderSwitchAdminList();
+    }
   });
 
   // --- DOM READY INITIALIZER ---
@@ -666,10 +708,18 @@
           return;
         }
 
-        matched.isOnline = true;
-        matched.activeDeviceId = currentDev.deviceId;
-        matched.deviceInfo = currentDev.deviceInfo;
-        matched.lastLoginAt = new Date().toISOString();
+        // Enforce single active admin on this device: activate matched, deactivate any other account on this device
+        accounts.forEach(acc => {
+          if (acc.username.trim().toLowerCase() === matched.username.trim().toLowerCase()) {
+            acc.isOnline = true;
+            acc.activeDeviceId = currentDev.deviceId;
+            acc.deviceInfo = currentDev.deviceInfo;
+            acc.lastLoginAt = new Date().toISOString();
+          } else if (acc.activeDeviceId === currentDev.deviceId) {
+            acc.isOnline = false;
+            acc.activeDeviceId = null;
+          }
+        });
         saveAdminAccounts(accounts);
 
         setPasswordVisibility(false);
@@ -791,18 +841,32 @@
           return;
         }
 
-        const updated = accounts.filter(a => a.username.toLowerCase() !== pendingDeleteUsername.toLowerCase());
+        const deletedUsername = pendingDeleteUsername;
+        const updated = accounts.filter(a => a.username.toLowerCase() !== deletedUsername.toLowerCase());
         saveAdminAccounts(updated);
 
         if (modalConfirmDeleteAdmin) modalConfirmDeleteAdmin.classList.add('hidden');
-        renderAdminAccountsList();
-        renderSwitchAdminList();
-        showToast('Admin Dihapus', `Akun "${pendingDeleteUsername}" telah dihapus dari seluruh sistem.`);
 
         const activeUser = sessionStorage.getItem('sqr_admin_username');
-        if (activeUser && activeUser.toLowerCase() === pendingDeleteUsername.toLowerCase()) {
-          handleAdminLogout();
+        if (activeUser && activeUser.trim().toLowerCase() === deletedUsername.trim().toLowerCase()) {
+          // Immediately terminate session without asking for confirm() again!
+          sessionStorage.removeItem(STORAGE_AUTH);
+          sessionStorage.removeItem('sqr_admin_username');
+          const adminSidebarDrawer = document.getElementById('adminSidebarDrawer');
+          if (adminSidebarDrawer) adminSidebarDrawer.classList.add('-translate-x-full');
+          const adminSidebarBackdrop = document.getElementById('adminSidebarBackdrop');
+          if (adminSidebarBackdrop) adminSidebarBackdrop.classList.add('hidden');
+          checkAuthStatus();
+          renderAdminAccountsList();
+          renderSwitchAdminList();
+          showToast('Sesi Berakhir', `Akun "${deletedUsername}" telah dihapus dan sesi Anda telah ditutup.`);
+          pendingDeleteUsername = null;
+          return;
         }
+
+        renderAdminAccountsList();
+        renderSwitchAdminList();
+        showToast('Admin Dihapus', `Akun "${deletedUsername}" telah dihapus dari seluruh sistem.`);
         pendingDeleteUsername = null;
       });
     }
@@ -827,9 +891,10 @@
         if (!pendingSwitchUsername) return;
         const accounts = getAdminAccounts();
         const target = accounts.find(a => a.username.toLowerCase() === pendingSwitchUsername.toLowerCase());
-        const passEntered = inputSwitchAdminPass ? inputSwitchAdminPass.value : '';
+        const passEntered = inputSwitchAdminPass ? inputSwitchAdminPass.value.trim() : '';
+        const rawPassEntered = inputSwitchAdminPass ? inputSwitchAdminPass.value : '';
 
-        if (!target || passEntered !== target.password) {
+        if (!target || (rawPassEntered !== target.password && passEntered !== target.password.trim())) {
           if (switchAdminError) switchAdminError.classList.remove('hidden');
           if (inputSwitchAdminPass) inputSwitchAdminPass.focus();
           return;
@@ -842,15 +907,13 @@
           return;
         }
 
-        // Deactivate old active admin
-        const activeUser = sessionStorage.getItem('sqr_admin_username');
-        if (activeUser) {
-          const old = accounts.find(a => a.username.toLowerCase() === activeUser.toLowerCase());
-          if (old) {
-            old.isOnline = false;
-            old.activeDeviceId = null;
+        // Deactivate all accounts on this device
+        accounts.forEach(a => {
+          if (a.activeDeviceId === currentDev.deviceId) {
+            a.isOnline = false;
+            a.activeDeviceId = null;
           }
-        }
+        });
 
         // Activate target account on this device
         target.isOnline = true;
@@ -1692,20 +1755,13 @@
             </div>
           </div>
           <div class="flex items-center gap-1.5">
-            ${isOwner ? `
-              <span class="px-2.5 py-1 rounded-lg bg-amber-500/10 border border-amber-500/25 text-[10px] font-bold text-amber-300 flex items-center gap-1 shadow-sm">
-                <i data-lucide="crown" class="w-3 h-3 text-amber-400"></i>
-                <span>Owner</span>
-              </span>
-            ` : (canDelete ? `
+            ${isOwner ? '' : (canDelete ? `
               <button type="button" data-del-user="${escapeHtml(acc.username)}"
                 class="btn-delete-admin px-2.5 py-1 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 text-[11px] font-bold transition flex items-center gap-1 cursor-pointer active:scale-95">
                 <i data-lucide="trash-2" class="w-3 h-3"></i>
                 <span>Hapus</span>
               </button>
-            ` : `
-              <span class="px-2 py-0.5 rounded bg-zinc-800 border border-zinc-700 text-[10px] font-semibold text-zinc-400">Admin</span>
-            `)}
+            ` : '')}
           </div>
         </div>
       `;
@@ -1785,15 +1841,32 @@
   function renderSwitchAdminList() {
     const listEl = document.getElementById('switchAdminList');
     const badgeEl = document.getElementById('currentAdminBadge');
-    const activeUsername = sessionStorage.getItem('sqr_admin_username') || 'Admin1118';
+    const accounts = getAdminAccounts();
+    const currentDev = window.DeviceFingerprint ? window.DeviceFingerprint.getDeviceInfo() : { deviceId: 'dev_local', deviceInfo: 'Perangkat Ini' };
+    let activeUsername = sessionStorage.getItem('sqr_admin_username');
+
+    // Validate that activeUsername exists in accounts list
+    const matchedActive = accounts.find(a => activeUsername && a.username.trim().toLowerCase() === activeUsername.trim().toLowerCase());
+    if (matchedActive) {
+      activeUsername = matchedActive.username;
+    } else {
+      const onlineThisDevice = accounts.find(a => a.isOnline && a.activeDeviceId === currentDev.deviceId);
+      if (onlineThisDevice) {
+        activeUsername = onlineThisDevice.username;
+        sessionStorage.setItem('sqr_admin_username', activeUsername);
+      } else if (accounts.length > 0) {
+        activeUsername = accounts[0].username;
+        sessionStorage.setItem('sqr_admin_username', activeUsername);
+      } else {
+        activeUsername = 'Admin1118';
+      }
+    }
+
     if (badgeEl) badgeEl.textContent = activeUsername;
     if (!listEl) return;
 
-    const accounts = getAdminAccounts();
-    const currentDev = window.DeviceFingerprint ? window.DeviceFingerprint.getDeviceInfo() : { deviceId: 'dev_local', deviceInfo: 'Perangkat Ini' };
-
     listEl.innerHTML = accounts.map(acc => {
-      const isCurrentActive = acc.username.toLowerCase() === activeUsername.toLowerCase();
+      const isCurrentActive = acc.username.trim().toLowerCase() === activeUsername.trim().toLowerCase();
       const isOnlineOtherDevice = acc.isOnline && acc.activeDeviceId && acc.activeDeviceId !== currentDev.deviceId;
 
       if (isCurrentActive) {
