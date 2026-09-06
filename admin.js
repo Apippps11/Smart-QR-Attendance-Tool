@@ -74,7 +74,7 @@
   // Admin Multi-Account Storage & Defaults
   const STORAGE_ADMIN_ACCOUNTS = 'sqr_admin_accounts';
   const DEFAULT_ADMIN_ACCOUNTS = [
-    { username: 'Admin1118', password: 'AFIFweb18', role: 'Super Admin', createdAt: '2026-01-01', activeDeviceId: null, deviceInfo: null, isOnline: false, lastLoginAt: null },
+    { username: 'Admin1118', password: 'AFIFweb18', role: 'Owner', createdAt: '2026-01-01', activeDeviceId: null, deviceInfo: null, isOnline: false, lastLoginAt: null },
     { username: 'Admin2', password: 'AFIFweb18', role: 'Admin', createdAt: '2026-01-01', activeDeviceId: null, deviceInfo: null, isOnline: false, lastLoginAt: null }
   ];
 
@@ -83,22 +83,31 @@
       const raw = localStorage.getItem(STORAGE_ADMIN_ACCOUNTS);
       if (!raw) {
         localStorage.setItem(STORAGE_ADMIN_ACCOUNTS, JSON.stringify(DEFAULT_ADMIN_ACCOUNTS));
-        return DEFAULT_ADMIN_ACCOUNTS;
+        return JSON.parse(JSON.stringify(DEFAULT_ADMIN_ACCOUNTS));
       }
       const parsed = JSON.parse(raw);
       if (!Array.isArray(parsed) || parsed.length === 0) {
         localStorage.setItem(STORAGE_ADMIN_ACCOUNTS, JSON.stringify(DEFAULT_ADMIN_ACCOUNTS));
-        return DEFAULT_ADMIN_ACCOUNTS;
+        return JSON.parse(JSON.stringify(DEFAULT_ADMIN_ACCOUNTS));
       }
-      return parsed.map(acc => ({
-        ...acc,
-        activeDeviceId: acc.activeDeviceId || null,
-        deviceInfo: acc.deviceInfo || null,
-        isOnline: !!acc.isOnline,
-        lastLoginAt: acc.lastLoginAt || null
-      }));
+      return parsed.map(acc => {
+        let role = acc.role || 'Admin';
+        if (acc.username && acc.username.toLowerCase() === 'admin1118') {
+          role = 'Owner';
+        } else if (role.toLowerCase() === 'super admin') {
+          role = 'Owner';
+        }
+        return {
+          ...acc,
+          role,
+          activeDeviceId: acc.activeDeviceId || null,
+          deviceInfo: acc.deviceInfo || null,
+          isOnline: !!acc.isOnline,
+          lastLoginAt: acc.lastLoginAt || null
+        };
+      });
     } catch (e) {
-      return DEFAULT_ADMIN_ACCOUNTS;
+      return JSON.parse(JSON.stringify(DEFAULT_ADMIN_ACCOUNTS));
     }
   }
 
@@ -260,6 +269,8 @@
       const adminSidebarBackdrop = document.getElementById('adminSidebarBackdrop');
       if (adminSidebarBackdrop) adminSidebarBackdrop.classList.add('hidden');
       checkAuthStatus();
+      renderAdminAccountsList();
+      renderSwitchAdminList();
       showToast('Logout Berhasil', 'Sesi admin telah ditutup.');
     }
   }
@@ -612,7 +623,8 @@
         gateModal.classList.add('hidden');
         adminLoginModal.classList.remove('hidden');
         loginError.classList.add('hidden');
-        loginError.textContent = 'Username atau password salah!';
+        const loginErrorText = document.getElementById('loginErrorText');
+        if (loginErrorText) loginErrorText.textContent = 'Username atau password salah!';
         inputUsername.value = '';
         inputPassword.value = '';
         setPasswordVisibility(false);
@@ -631,17 +643,25 @@
     formAdminLogin.addEventListener('submit', (e) => {
       e.preventDefault();
       const user = inputUsername ? inputUsername.value.trim() : '';
-      const pass = inputPassword ? inputPassword.value : '';
+      const pass = inputPassword ? inputPassword.value.trim() : '';
+      const rawPass = inputPassword ? inputPassword.value : '';
 
       const accounts = getAdminAccounts();
-      const matched = accounts.find(a => a.username.trim().toLowerCase() === user.toLowerCase() && a.password === pass);
+      const matched = accounts.find(a => 
+        a.username.trim().toLowerCase() === user.toLowerCase() && 
+        (a.password === rawPass || a.password.trim() === pass)
+      );
+
+      const loginErrorText = document.getElementById('loginErrorText');
 
       if (matched) {
         const currentDev = window.DeviceFingerprint ? window.DeviceFingerprint.getDeviceInfo() : { deviceId: 'dev_local', deviceInfo: 'Perangkat Ini' };
 
         // Requirement 5: Single device enforcement
         if (matched.isOnline && matched.activeDeviceId && matched.activeDeviceId !== currentDev.deviceId) {
-          loginError.textContent = `Akun "${matched.username}" sedang aktif di perangkat lain (${matched.deviceInfo || 'Perangkat Lain'}). Satu akun admin hanya boleh login di 1 perangkat pada waktu yang sama.`;
+          const errorMsg = `Akun "${matched.username}" sedang aktif di perangkat lain (${matched.deviceInfo || 'Perangkat Lain'}). Satu akun admin hanya boleh login di 1 perangkat pada waktu yang sama.`;
+          if (loginErrorText) loginErrorText.textContent = errorMsg;
+          else loginError.textContent = errorMsg;
           loginError.classList.remove('hidden');
           return;
         }
@@ -657,10 +677,19 @@
           sessionStorage.setItem(STORAGE_AUTH, 'true');
           sessionStorage.setItem('sqr_admin_username', matched.username);
         } catch (err) {}
+
+        if (inputUsername) inputUsername.value = '';
+        if (inputPassword) inputPassword.value = '';
+        if (loginError) loginError.classList.add('hidden');
+
         checkAuthStatus();
+        switchAdminView('projector');
+        renderAdminAccountsList();
+        renderSwitchAdminList();
         showToast('Login Berhasil', `Akses dibuka. Selamat datang ${matched.username}.`);
       } else {
-        loginError.textContent = 'Username atau password salah!';
+        if (loginErrorText) loginErrorText.textContent = 'Username atau password salah!';
+        else loginError.textContent = 'Username atau password salah!';
         loginError.classList.remove('hidden');
         if (inputPassword) {
           inputPassword.value = '';
@@ -691,8 +720,8 @@
       formConfirmAddAdmin.addEventListener('submit', (e) => {
         e.preventDefault();
         if (!pendingNewAdmin) return;
-        const retyped = inputConfirmAddAdminPass ? inputConfirmAddAdminPass.value : '';
-        if (retyped !== pendingNewAdmin.password) {
+        const retyped = inputConfirmAddAdminPass ? inputConfirmAddAdminPass.value.trim() : '';
+        if (retyped !== pendingNewAdmin.password.trim()) {
           if (confirmAddAdminError) confirmAddAdminError.classList.remove('hidden');
           if (inputConfirmAddAdminPass) inputConfirmAddAdminPass.focus();
           return;
@@ -701,7 +730,7 @@
         const accounts = getAdminAccounts();
         accounts.push({
           username: pendingNewAdmin.username,
-          password: pendingNewAdmin.password,
+          password: pendingNewAdmin.password.trim(),
           role: 'Admin',
           createdAt: getLocalDateString(),
           activeDeviceId: null,
@@ -742,11 +771,21 @@
       formConfirmDeleteAdmin.addEventListener('submit', (e) => {
         e.preventDefault();
         if (!pendingDeleteUsername) return;
+
+        // Requirement: Akun Admin1118 tidak dapat dihapus
+        if (pendingDeleteUsername.toLowerCase() === 'admin1118') {
+          alert('Akun Owner (Admin1118) adalah akun utama sistem dan tidak dapat dihapus!');
+          if (modalConfirmDeleteAdmin) modalConfirmDeleteAdmin.classList.add('hidden');
+          pendingDeleteUsername = null;
+          return;
+        }
+
         const accounts = getAdminAccounts();
         const target = accounts.find(a => a.username.toLowerCase() === pendingDeleteUsername.toLowerCase());
-        const passEntered = inputDeleteAdminPass ? inputDeleteAdminPass.value : '';
+        const passEntered = inputDeleteAdminPass ? inputDeleteAdminPass.value.trim() : '';
+        const rawPassEntered = inputDeleteAdminPass ? inputDeleteAdminPass.value : '';
 
-        if (!target || passEntered !== target.password) {
+        if (!target || (rawPassEntered !== target.password && passEntered !== target.password.trim())) {
           if (deleteAdminError) deleteAdminError.classList.remove('hidden');
           if (inputDeleteAdminPass) inputDeleteAdminPass.focus();
           return;
@@ -1628,6 +1667,7 @@
     const currentDev = window.DeviceFingerprint ? window.DeviceFingerprint.getDeviceInfo() : { deviceId: 'dev_local', deviceInfo: 'Perangkat Ini' };
 
     listEl.innerHTML = accounts.map(acc => {
+      const isOwner = acc.username.toLowerCase() === 'admin1118';
       let statusBadge = '';
       if (acc.isOnline) {
         if (acc.activeDeviceId === currentDev.deviceId) {
@@ -1646,21 +1686,26 @@
             <div>
               <div class="font-bold text-white font-mono flex items-center gap-2">
                 <span>${escapeHtml(acc.username)}</span>
-                <span class="text-[10px] font-normal text-zinc-400">(${acc.role || 'Admin'})</span>
+                <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded ${isOwner ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30' : 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20'}">${isOwner ? 'Owner' : (acc.role || 'Admin')}</span>
               </div>
               <div class="mt-0.5">${statusBadge}</div>
             </div>
           </div>
           <div class="flex items-center gap-1.5">
-            ${canDelete ? `
+            ${isOwner ? `
+              <span class="px-2.5 py-1 rounded-lg bg-amber-500/10 border border-amber-500/25 text-[10px] font-bold text-amber-300 flex items-center gap-1 shadow-sm">
+                <i data-lucide="crown" class="w-3 h-3 text-amber-400"></i>
+                <span>Owner</span>
+              </span>
+            ` : (canDelete ? `
               <button type="button" data-del-user="${escapeHtml(acc.username)}"
                 class="btn-delete-admin px-2.5 py-1 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 text-[11px] font-bold transition flex items-center gap-1 cursor-pointer active:scale-95">
                 <i data-lucide="trash-2" class="w-3 h-3"></i>
                 <span>Hapus</span>
               </button>
             ` : `
-              <span class="px-2 py-0.5 rounded bg-indigo-500/10 border border-indigo-500/20 text-[10px] font-semibold text-indigo-300">Admin Utama</span>
-            `}
+              <span class="px-2 py-0.5 rounded bg-zinc-800 border border-zinc-700 text-[10px] font-semibold text-zinc-400">Admin</span>
+            `)}
           </div>
         </div>
       `;
@@ -1670,6 +1715,13 @@
       btn.addEventListener('click', () => {
         const u = btn.getAttribute('data-del-user');
         if (!u) return;
+
+        // Protection: Admin1118 cannot be deleted
+        if (u.toLowerCase() === 'admin1118') {
+          alert('Akun Owner (Admin1118) adalah akun utama sistem dan tidak dapat dihapus.');
+          return;
+        }
+
         const current = getAdminAccounts();
         if (current.length <= 1) {
           alert('Tidak dapat menghapus akun admin terakhir. Minimal harus ada 1 akun admin aktif di sistem.');
